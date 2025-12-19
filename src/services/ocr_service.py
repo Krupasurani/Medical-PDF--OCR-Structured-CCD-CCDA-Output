@@ -59,15 +59,16 @@ class OCRService:
         self.config = get_config()
 
         # Configure Gemini API
+        # Use gemini-1.5-pro for vision OCR (supports images)
         if USING_NEW_API:
             self.client = genai.Client(api_key=self.config.gemini_api_key)
-            self.model_name = 'gemini-1.5-pro-latest'
+            self.model_name = 'gemini-1.5-pro'
             logger.info("OCR service initialized (new API)", model=self.model_name)
         else:
             genai.configure(api_key=self.config.gemini_api_key)
             try:
-                self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
-                logger.info("OCR service initialized (legacy API)", model="gemini-1.5-pro-latest")
+                self.model = genai.GenerativeModel('gemini-1.5-pro')
+                logger.info("OCR service initialized (legacy API)", model="gemini-1.5-pro")
             except Exception as e:
                 logger.error("Failed to initialize OCR model", error=str(e))
                 raise OCRError(f"Model initialization failed: {e}")
