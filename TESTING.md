@@ -64,8 +64,8 @@ pytest -s
 
 ```bash
 # Process a medical PDF
-python main.py --input path/to/medical_record.pdf --output output/
-
+python main.py --input "C:\Users\a\Downloads\notes_fnl (3).pdf" --output output/
+#C:\Users\a\Downloads\notes_fnl (3).pdf
 # With debug mode (saves intermediate results)
 python main.py --input sample.pdf --output output/ --debug
 ```

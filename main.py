@@ -136,15 +136,15 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     )
 
     # Step 5: Save Canonical JSON
+  
     logger.info("-" * 60)
     logger.info("STEP 5: SAVE CANONICAL JSON")
     logger.info("-" * 60)
 
     canonical_output_path = output_path / "canonical.json"
-    with open(canonical_output_path, "w") as f:
+    with open(canonical_output_path, "w", encoding="utf-8") as f:  # ← ADD encoding="utf-8"
         f.write(medical_document.model_dump_json())
-
-    logger.info("Canonical JSON saved", path=str(canonical_output_path))
+        logger.info("Canonical JSON saved", path=str(canonical_output_path))
 
     # Summary
     logger.info("=" * 60)
