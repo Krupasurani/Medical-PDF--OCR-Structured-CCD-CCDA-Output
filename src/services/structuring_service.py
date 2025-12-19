@@ -120,7 +120,14 @@ Extract structured data into JSON format. Remember:
 - Source pages: {chunk['pages']}
 """
 
-            # Call Gemini API
+            # Call Gemini API with safety settings for medical content
+            safety_settings = {
+                genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+            }
+
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
@@ -129,6 +136,7 @@ Extract structured data into JSON format. Remember:
                     top_k=1,
                     max_output_tokens=8192,
                 ),
+                safety_settings=safety_settings,
             )
 
             # Parse JSON response

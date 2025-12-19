@@ -114,7 +114,7 @@ class OCRService:
             # Prepare prompt
             prompt = f"{OCR_SYSTEM_PROMPT}\n\nExtract all text from this medical document page."
 
-            # Call Gemini Vision API
+            # Call Gemini Vision API with safety settings for medical content
             if USING_NEW_API:
                 # New API
                 response = self.client.models.generate_content(
@@ -125,11 +125,36 @@ class OCRService:
                         top_p=1.0,
                         top_k=1,
                         max_output_tokens=4096,
+                        safety_settings=[
+                            types.SafetySetting(
+                                category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                                threshold="BLOCK_NONE"
+                            ),
+                            types.SafetySetting(
+                                category="HARM_CATEGORY_HARASSMENT",
+                                threshold="BLOCK_NONE"
+                            ),
+                            types.SafetySetting(
+                                category="HARM_CATEGORY_HATE_SPEECH",
+                                threshold="BLOCK_NONE"
+                            ),
+                            types.SafetySetting(
+                                category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                                threshold="BLOCK_NONE"
+                            ),
+                        ]
                     )
                 )
                 raw_text = response.text if hasattr(response, 'text') and response.text else ""
             else:
-                # Legacy API
+                # Legacy API with safety settings for medical content
+                safety_settings = {
+                    genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                    genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                    genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                    genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+                }
+
                 response = self.model.generate_content(
                     [prompt, image],
                     generation_config=genai.GenerationConfig(
@@ -138,6 +163,7 @@ class OCRService:
                         top_k=1,
                         max_output_tokens=4096,
                     ),
+                    safety_settings=safety_settings,
                 )
                 raw_text = response.text if response.text else ""
 
