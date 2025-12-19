@@ -1,15 +1,13 @@
-# ARCHITECTURE.md
+# SYSTEM ARCHITECTURE — Medical PDF Processing Pipeline
 
-## System Overview
+## Overview
 
-This system converts scanned medical PDFs into structured clinical documents using a **local, deterministic AI pipeline**.
+This system converts scanned medical PDFs into:
+- **Canonical JSON** (source of truth)
+- **CCD / CCDA-style XML** (structure-compatible, not certified HL7 conformance)
+- **Human-readable medical documents** (PDF / DOCX)
 
-The architecture follows a strict separation of concerns:
-- **OCR extraction** (vision-based)
-- **Medical structuring** (LLM-based)
-- **Rendering** (template-based)
-
-**No logic is duplicated across stages.**
+The system is **local, single-user, and API-ready**.
 
 ---
 
@@ -18,232 +16,263 @@ The architecture follows a strict separation of concerns:
 ```
 PDF
   ↓
-Vision OCR (Gemini 3 Preview)
+Pre-validation
   ↓
-Raw OCR Pages
+Vision OCR
   ↓
-Chunking & Structuring (Gemini 2.5 Flash)
+Chunking
+  ↓
+Schema-enforced structuring
   ↓
 Canonical JSON
   ↓
-  ├── XML Renderer (CCD/CCDA-style)
-  └── Human-Readable Renderer (HTML → PDF/DOCX)
+  ├── XML Renderer
+  └── Human-readable Renderer
 ```
 
 ---
 
-## Core Principles
+## Component Breakdown
 
-1. **JSON is the single source of truth**
-2. **No hallucination or inference**
-3. **Deterministic output** (same input → same output)
-4. **Explicit uncertainty handling** (`[UNCLEAR]` markers)
-5. **API-ready but local-only deployment**
+### 1. PDF Ingestion
 
----
+**Purpose:** Validate and prepare PDF for processing
 
-## Component Architecture
+**Checks:**
+- File format validation
+- Page count detection
+- DPI & quality assessment
+- Password detection
+- File size limits (max 50MB)
 
-### 1. Input Layer
-
-**Responsibilities:**
-- Accept PDF files only
-- Validate:
-  - File size (max 50MB)
-  - Page count (max 100 pages)
-  - PDF integrity
-- No persistent storage
+**Rejects invalid or locked PDFs early.**
 
 **Technology:**
-- `pypdf` for PDF parsing
-- `pdf2image` for page extraction
+- `pypdf` - PDF parsing
+- `pdf2image` - Page image extraction
+- `Pillow` - Image handling
 
 ---
 
-### 2. OCR Layer (Vision-Based)
+### 2. Vision OCR Engine
 
-**Model:** Gemini 3 Preview
+**Purpose:** Extract text exactly as written (no interpretation)
 
-**Responsibilities:**
-- Page-by-page text extraction
-- Preserve original text exactly (no correction)
-- Detect unreadable content
-- Output raw OCR text with confidence score
-
-**Input:**
-```python
-{
-  "pdf_path": "path/to/file.pdf",
-  "page_number": 1
-}
-```
+**Process:**
+- Page-by-page image processing
+- Handwritten + printed text extraction
+- Layout preservation
+- Confidence scoring
 
 **Output:**
 ```json
 {
   "page_number": 1,
   "raw_text": "...",
-  "confidence_score": 0.95
+  "confidence_score": 0.92,
+  "layout_hints": {
+    "has_tables": true,
+    "has_handwriting": true
+  }
 }
 ```
 
-**No correction or interpretation occurs here.**
+**Rules:**
+- No medical reasoning
+- No interpretation
+- Preserve all symbols and abbreviations
+
+**Model:** Vision OCR engine (model-agnostic interface)
 
 ---
 
-### 3. Chunking & Structuring Layer
+### 3. Chunking Engine
 
-**Model:** Gemini 2.5 Flash
+**Purpose:** Organize OCR text into logical sections
+
+**Methods:**
+- Visit detection (boundary identification)
+- Date grouping (explicit dates only)
+- Encounter separation
+
+**Uses:**
+- Rule-based logic (date patterns, section headers)
+- LLM assistance for ambiguous boundaries
+
+**Output:** Segmented text blocks with metadata
+
+---
+
+### 4. Structuring Engine
+
+**Purpose:** Map OCR text to strict JSON schema
 
 **Responsibilities:**
-- Group OCR text by visit/encounter/date
 - Populate canonical JSON schema
-- Track source page references for all data
-- Flag ambiguous or incomplete data
-- Merge duplicate entries (exact + fuzzy matching)
+- Deduplicate repeated entries (exact + fuzzy matching)
+- Preserve all conflicts (never auto-resolve)
+- Flag uncertainty
 
-**Input:**
-```python
-{
-  "ocr_pages": [
-    {"page_number": 1, "raw_text": "..."},
-    {"page_number": 2, "raw_text": "..."}
-  ]
-}
-```
+**Rules:**
+- No hallucination permitted
+- No invented dates or values
+- No silent corrections
 
-**Output:** Canonical JSON (see schema below)
-
-**This layer applies structure, not medical judgment.**
+**Model:** Structuring/reasoning engine (model-agnostic interface)
 
 ---
 
-### 4. Canonical Data Layer (JSON)
+### 5. Canonical JSON Layer
 
-**Purpose:** Single authoritative representation of medical document
+**Purpose:** Single source of truth for all outputs
 
-**Schema:** Version 2.0
+**Characteristics:**
+- Schema-enforced (Pydantic validation)
+- All downstream outputs MUST render from this JSON
+- No re-extraction allowed in rendering phase
+- Version-controlled schema (currently v2.0)
 
-**Key sections:**
-- `document_metadata` - Patient demographics, document info
-- `visits[]` - Array of clinical encounters
+**Schema sections:**
+- `document_metadata` - Patient demographics
+- `visits[]` - Clinical encounters
   - `medications[]`
   - `vital_signs{}`
   - `problem_list[]`
-  - `results[]` (lab values, diagnostics)
+  - `results[]`
   - `assessment`
   - `plan[]`
-- `data_quality` - Confidence scores, warnings, unclear sections
+- `data_quality` - Confidence scores, warnings
 
-**All downstream outputs derive from this JSON.**
-
-**Schema file:** `schemas/canonical_v2.0.json`
+**File:** `schemas/canonical_v2.0.json`
 
 ---
 
-### 5. Rendering Layer
-
-#### XML Renderer
+### 6. XML Renderer
 
 **Purpose:** Generate CCD/CCDA-style XML
 
 **Method:**
-- Jinja2 templates
+- Template-based rendering (Jinja2)
 - All data from canonical JSON
-- No extraction logic
+- No additional extraction logic
 
-**Output:** Standards-aligned XML (HL7 CCD format)
+**Output Format:**
+- CCD/CCDA-style structure (structure-compatible, not certified HL7 conformance)
+- Human-readable XML
+- UTF-8 encoding
+- Schema validation (basic structure check)
 
-#### Human-Readable Renderer
+**Technology:**
+- `lxml` - XML processing
+- `jinja2` - Templating
+
+**Note:** This is "CCD/CCDA-style" - semantically similar structure, but NOT claiming full HL7 certification or conformance testing.
+
+---
+
+### 7. Human-Readable Renderer
 
 **Purpose:** Generate clinical narrative document
 
 **Method:**
 - HTML template (Jinja2)
-- Export to PDF (reportlab) or DOCX (python-docx)
-- Professional medical document styling
+- Convert to PDF (reportlab) or DOCX (python-docx)
+- Professional medical formatting
 
-**Output:** PDF or DOCX file
+**Output:**
+- Clear section headings
+- Data quality warnings included
+- `[UNCLEAR]` sections marked visually
+- Source page references
 
-**Both renderers are pure transformation layers - no additional data processing.**
+**Technology:**
+- `reportlab` - PDF generation
+- `python-docx` - DOCX generation
+- `jinja2` - Templating
 
 ---
 
-### 6. UI Layer
+## UI Layer (Phase 1)
 
 **Framework:** Streamlit (local web interface)
 
-**Features:**
-- Upload PDF file
-- Real-time processing progress
-- Display warnings and confidence scores
-- Download outputs:
-  - Canonical JSON
-  - CCD XML
-  - Human-readable PDF/DOCX
+**Characteristics:**
+- Local execution only (localhost binding)
+- Single-user (no authentication)
+- No external exposure
+- Session-based (no data persistence)
 
-**Constraints:**
-- No authentication (single-user)
-- No external exposure (localhost only)
-- No data persistence (session-based)
+**User Flow:**
+1. Upload PDF
+2. Monitor processing (real-time progress)
+3. Review warnings/confidence scores
+4. Download outputs (JSON, XML, PDF, DOCX)
+
+**Important:** This is a utility interface, NOT a security system. It provides:
+- ✅ Local privacy (no external transmission)
+- ✅ Temporary processing (no data retention)
+- ❌ NOT multi-user authentication
+- ❌ NOT access control
+- ❌ NOT HIPAA-certified infrastructure
 
 ---
 
 ## Data Flow Diagram
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      User / Client                       │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-                   ┌────────────────┐
-                   │  Streamlit UI  │
-                   └────────────────┘
-                            ↓
-              ┌─────────────────────────┐
-              │   PDF Validation        │
-              │   (size, format, pages) │
-              └─────────────────────────┘
-                            ↓
-        ┌───────────────────────────────────────┐
-        │   OCR Service (Gemini 3 Preview)      │
-        │   • Page-by-page extraction           │
-        │   • Confidence scoring                │
-        └───────────────────────────────────────┘
-                            ↓
-              ┌─────────────────────────┐
-              │   OCR Cache (memory)    │
-              │   [page_1, page_2, ...] │
-              └─────────────────────────┘
-                            ↓
-        ┌───────────────────────────────────────┐
-        │  Structuring Service                  │
-        │  (Gemini 2.5 Flash)                   │
-        │  • Visit chunking                     │
-        │  • Schema population                  │
-        │  • Deduplication                      │
-        └───────────────────────────────────────┘
-                            ↓
-              ┌─────────────────────────┐
-              │   Canonical JSON        │
-              │   (single source)       │
-              └─────────────────────────┘
-                            ↓
-                   ┌────────┴────────┐
-                   ↓                 ↓
-        ┌──────────────────┐  ┌─────────────────┐
-        │  XML Renderer    │  │ Human-Readable  │
-        │  (template)      │  │ Renderer        │
-        └──────────────────┘  └─────────────────┘
-                   ↓                 ↓
-        ┌──────────────────┐  ┌─────────────────┐
-        │   CCD XML File   │  │   PDF/DOCX      │
-        └──────────────────┘  └─────────────────┘
-                            ↓
-                   ┌────────────────┐
-                   │  Download to   │
-                   │     User       │
-                   └────────────────┘
+┌─────────────────────────────────────────┐
+│              User / Client               │
+└─────────────────────────────────────────┘
+                    ↓
+          ┌──────────────────┐
+          │  Streamlit UI    │
+          │  (localhost)     │
+          └──────────────────┘
+                    ↓
+       ┌────────────────────────┐
+       │  PDF Validation        │
+       │  (size, format, pages) │
+       └────────────────────────┘
+                    ↓
+       ┌────────────────────────┐
+       │  Vision OCR Engine     │
+       │  (page-by-page)        │
+       └────────────────────────┘
+                    ↓
+       ┌────────────────────────┐
+       │  OCR Cache (memory)    │
+       │  [page_1, page_2, ...] │
+       └────────────────────────┘
+                    ↓
+       ┌────────────────────────┐
+       │  Chunking Engine       │
+       │  (visit detection)     │
+       └────────────────────────┘
+                    ↓
+       ┌────────────────────────┐
+       │  Structuring Engine    │
+       │  (schema population)   │
+       └────────────────────────┘
+                    ↓
+       ┌────────────────────────┐
+       │  Canonical JSON        │
+       │  (single source)       │
+       └────────────────────────┘
+                    ↓
+          ┌─────────┴─────────┐
+          ↓                   ↓
+  ┌───────────────┐   ┌──────────────────┐
+  │ XML Renderer  │   │ Human-Readable   │
+  │ (template)    │   │ Renderer         │
+  └───────────────┘   └──────────────────┘
+          ↓                   ↓
+  ┌───────────────┐   ┌──────────────────┐
+  │   CCD XML     │   │   PDF / DOCX     │
+  └───────────────┘   └──────────────────┘
+                    ↓
+          ┌──────────────────┐
+          │  Download to User │
+          └──────────────────┘
 ```
 
 ---
@@ -253,12 +282,13 @@ Canonical JSON
 ### Core Dependencies
 
 **PDF Processing:**
-- `pypdf==4.0.1` - PDF parsing
-- `pdf2image==1.17.0` - Page image extraction
-- `Pillow==10.2.0` - Image handling
+- `pypdf==4.0.1`
+- `pdf2image==1.17.0`
+- `Pillow==10.2.0`
 
 **AI/ML:**
-- `google-generativeai==0.3.2` - Gemini API client
+- Vision OCR engine (model-agnostic client)
+- Structuring/reasoning engine (model-agnostic client)
 
 **Data Validation:**
 - `pydantic==2.5.3` - Schema validation
@@ -271,67 +301,97 @@ Canonical JSON
 - `python-docx==1.1.0` - DOCX generation
 
 **UI:**
-- `streamlit==1.30.0` - Web interface
+- `streamlit==1.30.0`
 
 **Utilities:**
 - `python-dateutil==2.8.2` - Date parsing
 - `python-dotenv==1.0.1` - Environment variables
 - `tenacity==8.2.3` - Retry logic
 
-### Python Version
-- **Minimum:** Python 3.10
-- **Recommended:** Python 3.11
+**Python Version:** 3.10+ (recommended 3.11)
 
 ---
 
 ## Security & Privacy
 
 ### Data Handling
-- ✅ **Local-only execution** (no cloud storage)
+- ✅ **Local processing only** (no cloud storage)
 - ✅ **In-memory processing** (files not persisted)
-- ✅ **Temporary file cleanup** (automatic after processing)
+- ✅ **Temporary file cleanup** (automatic)
 - ✅ **No logging of PHI** (configurable)
-
-### API Security
-- ✅ **API keys in environment variables** (never in code)
-- ✅ **HTTPS for Gemini API calls**
-- ✅ **No data sharing** (Gemini API: data not used for training per Google Cloud terms)
+- ✅ **No data reuse** (each session isolated)
+- ✅ **No external APIs exposed**
 
 ### Deployment
 - ✅ **Localhost binding only** (`127.0.0.1`)
 - ✅ **No network exposure**
-- ✅ **No authentication required** (single-user assumption)
+- ✅ **No authentication** (single-user utility)
 
-**Note:** While this system follows HIPAA-aligned practices (minimum necessary data, audit logging, secure disposal), it is **not certified as HIPAA-compliant**. Consult legal/compliance before use in production healthcare environments.
+### Important Notes
+- This is a **local utility**, not a security-hardened production system
+- HIPAA-aligned practices are followed (minimum necessary, secure disposal)
+- **NOT certified as HIPAA-compliant infrastructure**
+- Consult legal/compliance before use in regulated environments
 
 ---
 
-## Error Handling
+## API Readiness
 
-### Philosophy
+Internal interfaces are modular and stateless.
+
+**Current State (Phase 1):**
+- Core services are callable Python functions
+- No REST endpoints exposed
+- No external API surface
+
+**Future State (Phase 2):**
+- REST API wrapping (FastAPI)
+- Authentication (if multi-user)
+- Rate limiting
+- Async processing (job queue)
+
+**Example future endpoints:**
+```
+POST /api/v1/process
+  - Upload PDF
+  - Response: Job ID
+
+GET /api/v1/jobs/{job_id}
+  - Check status
+  - Response: Status + results
+
+GET /api/v1/jobs/{job_id}/outputs/{type}
+  - Download JSON/XML/PDF/DOCX
+```
+
+**No changes to core logic required** - only add API wrapper.
+
+---
+
+## Error Handling Philosophy
+
+### Principles
 - **Fail loudly** - No silent failures
-- **Partial results** - Return what was successfully extracted
-- **Clear errors** - User-friendly error messages
-- **Traceability** - Log errors with context
+- **Log clearly** - Structured logging with context
+- **Preserve partial results** - Return what was successfully extracted
+- **Never continue silently** - Alert user to issues
 
 ### Error Categories
 
-| Error Type | Handling | User Experience |
-|------------|----------|----------------|
+| Error Type | Handling | User Message |
+|------------|----------|--------------|
 | Invalid PDF | Reject upload | "PDF file is corrupted or invalid" |
 | File too large | Reject upload | "File exceeds 50MB limit" |
-| OCR failure | Retry 3x, then partial results | "OCR failed for page 3, continuing..." |
-| API timeout | Retry with backoff | "Processing delayed, retrying..." |
+| OCR failure | Retry 3x, then partial results | "OCR failed for page 3, continuing with remaining pages" |
+| API timeout | Retry with exponential backoff | "Processing delayed, retrying..." |
 | Schema validation | Accept with warnings | "Output may be incomplete, see warnings" |
 | No text detected | Return empty JSON | "No text detected in document" |
 
 ### Retry Logic
-
 ```python
-# Exponential backoff for API calls
 MAX_RETRIES = 3
 BACKOFF_MULTIPLIER = 2
-INITIAL_DELAY = 1  # seconds
+INITIAL_DELAY = 1  # second
 
 # Retry on: timeout, rate limit, 5xx errors
 # Fail immediately on: 4xx errors (except 429)
@@ -350,173 +410,17 @@ INITIAL_DELAY = 1  # seconds
 | 21-50 pages   | <3 min   | <6 minutes       |
 | 51-100 pages  | <6 min   | <12 minutes      |
 
-**Note:** Times assume reasonable quality scans (200+ DPI) and normal API latency.
+**Note:** Estimates based on reasonable quality scans (200+ DPI) and normal API latency.
 
 ### Resource Usage
 
 **Memory:**
-- Peak usage: ~2GB per document
-- Streaming processing for large files
+- Peak: ~2GB per document
+- Streaming for large files
 
 **Disk:**
 - Temporary storage: ~2x file size
 - Auto-cleanup after processing
-
-**API Rate Limits (Gemini):**
-- Monitor quota usage
-- Implement backoff on 429 responses
-
----
-
-## API Readiness (Future)
-
-While no APIs are exposed in Phase 1, the architecture is designed for easy REST API wrapping:
-
-**Modular Services:**
-```python
-# Core services are stateless functions
-ocr_service.extract_text(pdf_path) → OCR result
-structuring_service.structure(ocr_pages) → JSON
-rendering_service.render_xml(json) → XML
-rendering_service.render_pdf(json) → PDF
-```
-
-**Future API Endpoints (Phase 2):**
-```
-POST /api/v1/process
-  - Body: PDF file (multipart/form-data)
-  - Response: Job ID
-
-GET /api/v1/jobs/{job_id}
-  - Response: Processing status + results
-
-GET /api/v1/jobs/{job_id}/outputs/{type}
-  - type: json | xml | pdf | docx
-  - Response: File download
-```
-
-**No changes to core logic required - only add FastAPI wrapper.**
-
----
-
-## Testing Strategy
-
-### Unit Tests
-- Schema validation
-- Deduplication logic
-- Date parsing
-- Error handling
-- Template rendering
-
-### Integration Tests
-- OCR → Structuring pipeline
-- JSON → XML conversion
-- JSON → PDF conversion
-- Error propagation
-
-### End-to-End Tests
-- Process real medical PDFs
-- Validate outputs against expected structure
-- Performance benchmarks
-
-**Test Framework:** pytest
-
----
-
-## Limitations & Constraints
-
-### Current Scope (Phase 1)
-- ✅ Local deployment only
-- ✅ Single-user operation
-- ✅ No authentication
-- ✅ No persistent storage
-- ✅ Basic CCD/CCDA XML (not full FHIR)
-
-### Explicitly Out of Scope
-- ❌ Cloud deployment
-- ❌ Multi-user support
-- ❌ Public API exposure
-- ❌ Clinical decision support
-- ❌ Medical code validation (ICD-10, CPT)
-- ❌ EHR system integration
-- ❌ Real-time processing
-
-### Known Edge Cases
-- **Handwriting quality:** Low confidence on heavily handwritten documents
-- **Multi-column layouts:** May not preserve exact column order
-- **Tables:** Preserved as text blocks, not structured tables
-- **Medical symbols:** Best-effort preservation (depends on OCR capability)
-
----
-
-## Deployment Architecture
-
-### Local Deployment (Phase 1)
-
-```
-┌─────────────────────────────────────┐
-│       Local Machine (User)          │
-│                                     │
-│  ┌───────────────────────────────┐  │
-│  │   Python 3.10+ Environment    │  │
-│  │                               │  │
-│  │  ┌─────────────────────────┐  │  │
-│  │  │  Streamlit App          │  │  │
-│  │  │  (localhost:8501)       │  │  │
-│  │  └─────────────────────────┘  │  │
-│  │                               │  │
-│  │  ┌─────────────────────────┐  │  │
-│  │  │  Core Services          │  │  │
-│  │  │  • OCR                  │  │  │
-│  │  │  • Structuring          │  │  │
-│  │  │  • Rendering            │  │  │
-│  │  └─────────────────────────┘  │  │
-│  │                               │  │
-│  └───────────────────────────────┘  │
-│                                     │
-│  External API Calls:                │
-│  └─→ Gemini API (HTTPS)             │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**No server infrastructure required.**
-
----
-
-## Configuration
-
-### Environment Variables
-
-```bash
-# .env file
-GEMINI_API_KEY=your_api_key_here
-
-# Optional
-DEBUG=false
-MAX_FILE_SIZE_MB=50
-MAX_PAGE_COUNT=100
-LOG_LEVEL=INFO
-```
-
-### Configuration File (Optional)
-
-```yaml
-# config.yaml
-processing:
-  max_file_size_mb: 50
-  max_page_count: 100
-  ocr_timeout_seconds: 30
-  structuring_timeout_seconds: 120
-
-output:
-  include_debug_info: false
-  default_format: pdf  # pdf | docx
-
-logging:
-  level: INFO
-  include_phi: false  # Never log patient names
-```
 
 ---
 
@@ -526,8 +430,8 @@ logging:
 project/
 ├── src/
 │   ├── services/
-│   │   ├── ocr_service.py          # Gemini 3 Preview integration
-│   │   ├── structuring_service.py  # Gemini 2.5 Flash integration
+│   │   ├── ocr_service.py          # Vision OCR integration
+│   │   ├── structuring_service.py  # Structuring engine integration
 │   │   ├── rendering_service.py    # XML + PDF/DOCX generation
 │   │   └── validation_service.py   # Schema validation
 │   ├── models/
@@ -536,7 +440,7 @@ project/
 │   ├── utils/
 │   │   ├── pdf_utils.py            # PDF handling
 │   │   ├── retry_utils.py          # Exponential backoff
-│   │   └── date_utils.py           # Date parsing/formatting
+│   │   └── date_utils.py           # Date parsing
 │   └── ui/
 │       └── streamlit_app.py        # UI entry point
 ├── templates/
@@ -560,82 +464,74 @@ project/
 
 ---
 
-## Development Workflow
+## Testing Strategy
 
-### Setup
-```bash
-# Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+### Unit Tests
+- Schema validation
+- Deduplication logic
+- Date parsing
+- Error handling
+- Template rendering
 
-# Install dependencies
-pip install -r requirements.txt
+### Integration Tests
+- OCR → Structuring pipeline
+- JSON → XML conversion
+- JSON → PDF conversion
+- Error propagation
 
-# Set up environment
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
-```
+### End-to-End Tests
+- Process real medical PDFs
+- Validate outputs against expected structure
+- Performance benchmarks
+- Golden datasets (5 representative samples)
 
-### Run Locally
-```bash
-# Start Streamlit UI
-streamlit run src/ui/streamlit_app.py
-
-# Or use CLI (if implemented)
-python main.py --input sample.pdf --output results/
-```
-
-### Testing
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src tests/
-
-# Run specific test category
-pytest tests/unit/
-pytest tests/integration/
-pytest tests/e2e/
-```
+**Test Framework:** pytest
 
 ---
 
-## Monitoring & Observability
+## Limitations & Constraints
 
-### Logging
+### Current Scope (Phase 1)
+- ✅ Local deployment only
+- ✅ Single-user operation
+- ✅ No authentication
+- ✅ No persistent storage
+- ✅ CCD/CCDA-style XML (structure-compatible, not certified)
 
-**Structured logs:**
-```json
-{
-  "timestamp": "2025-12-19T10:30:00Z",
-  "level": "INFO",
-  "component": "ocr_service",
-  "message": "Processing page 3/15",
-  "metadata": {
-    "page_number": 3,
-    "confidence": 0.92
-  }
-}
+### Explicitly Out of Scope
+- ❌ Cloud deployment
+- ❌ Multi-user support
+- ❌ Public API exposure
+- ❌ Clinical decision support
+- ❌ Medical code validation (ICD-10, CPT)
+- ❌ EHR system integration
+- ❌ Real-time processing
+- ❌ Full HL7 FHIR R4 compliance
+
+### Known Edge Cases
+- **Handwriting quality:** Low confidence on heavily handwritten documents
+- **Multi-column layouts:** May not preserve exact column order
+- **Tables:** Preserved as text blocks, not structured tables
+- **Medical symbols:** Best-effort preservation
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# .env file
+VISION_OCR_API_KEY=your_api_key_here
+STRUCTURING_API_KEY=your_api_key_here
+
+# Optional
+DEBUG=false
+MAX_FILE_SIZE_MB=50
+MAX_PAGE_COUNT=100
+LOG_LEVEL=INFO
+LOG_PHI=false  # Never log patient names
 ```
-
-**Log levels:**
-- `INFO`: Normal operations
-- `WARN`: Recoverable issues (low confidence, missing data)
-- `ERROR`: Processing failures
-
-**PHI Handling:**
-- Patient names/IDs NEVER logged (even in debug mode)
-- Only log page numbers, confidence scores, error types
-
-### Metrics (Future)
-
-If adding metrics collection:
-- Documents processed
-- Processing time per page
-- API call latency
-- Error rates by type
-- Confidence score distribution
 
 ---
 
@@ -646,9 +542,10 @@ This architecture prioritizes:
 - ✅ **Traceability over automation** - Track all data sources
 - ✅ **Determinism over creativity** - Same input = same output
 - ✅ **Clarity over complexity** - Simple, maintainable design
+- ✅ **Fail loudly over silent errors** - Always surface issues
 
 It is designed for **safe, controlled medical document processing** with clear boundaries and explicit error handling.
 
 ---
 
-**Questions or clarifications:** See `/docs/USER_GUIDE.md` or contact project owner.
+**Questions or clarifications:** See documentation in `/docs/` or contact project owner.

@@ -14,7 +14,7 @@
 ### Objective
 Build a **local, secure, single-user Python system** that converts scanned medical PDFs into:
 1. **Canonical JSON** (schema-enforced, single source of truth)
-2. **CCD / CCDA-style XML** (clinical interoperability standard)
+2. **CCD / CCDA-style XML** (structure-compatible, not certified HL7 conformance)
 3. **Human-readable document** (HTML → PDF / DOCX)
 
 The system must:
@@ -335,11 +335,13 @@ The system must:
 
 ## 6. XML Output Requirements (CCD/CCDA-Style)
 
-### Standards Compliance
-- **Base Standard:** HL7 CCD (Continuity of Care Document)
-- **Schema Validation:** MUST validate against CCD XSD
+### Standards Alignment
+- **Base Standard:** CCD/CCDA-style structure (structure-compatible, not certified HL7 conformance)
+- **Schema Validation:** Basic structure validation (not full HL7 XSD conformance testing)
 - **Encoding:** UTF-8
 - **Format:** Human-readable with proper indentation
+
+**Important:** This generates XML in a CCD/CCDA-like semantic structure, but is NOT claiming full HL7 certification or official conformance.
 
 ### Required CCD Sections
 ```xml
@@ -1423,7 +1425,7 @@ except Exception as e:
 - [ ] Processes mixed handwritten + printed PDFs
 - [ ] Handles all edge cases documented in Section 9
 - [ ] Outputs valid canonical JSON (schema v2.0)
-- [ ] Outputs valid CCD/CCDA XML
+- [ ] Outputs CCD/CCDA-style XML (structure-compatible)
 - [ ] Outputs professional PDF report
 - [ ] Outputs editable DOCX report
 - [ ] Streamlit UI functional (upload → download)
