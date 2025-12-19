@@ -14,7 +14,7 @@
 ### Objective
 Build a **local, secure, single-user Python system** that converts scanned medical PDFs into:
 1. **Canonical JSON** (schema-enforced, single source of truth)
-2. **CCD / CCDA-style XML** (clinical interoperability standard)
+2. **CCD / CCDA-style XML** (structure-compatible, not certified HL7 conformance)
 3. **Human-readable document** (HTML → PDF / DOCX)
 
 The system must:
@@ -335,11 +335,13 @@ The system must:
 
 ## 6. XML Output Requirements (CCD/CCDA-Style)
 
-### Standards Compliance
-- **Base Standard:** HL7 CCD (Continuity of Care Document)
-- **Schema Validation:** MUST validate against CCD XSD
+### Standards Alignment
+- **Base Standard:** CCD/CCDA-style structure (structure-compatible, not certified HL7 conformance)
+- **Schema Validation:** Basic structure validation (not full HL7 XSD conformance testing)
 - **Encoding:** UTF-8
 - **Format:** Human-readable with proper indentation
+
+**Important:** This generates XML in a CCD/CCDA-like semantic structure, but is NOT claiming full HL7 certification or official conformance.
 
 ### Required CCD Sections
 ```xml
@@ -1268,7 +1270,7 @@ mypy==1.8.0
 - This is a **documentation tool**, not a diagnostic tool
 - Does NOT provide treatment recommendations
 - Does NOT make clinical decisions
-- FDA regulation likely not applicable (consult legal)
+- **Consult legal/compliance before use in regulated healthcare environments**
 
 **Data Accuracy Disclaimer:**
 ```
@@ -1298,7 +1300,7 @@ If used in clinical workflows, maintain:
 
 ## 19. Milestone Breakdown (Contract-Aligned)
 
-### ✅ Milestone 1: Core Pipeline (Weeks 1-2)
+### ✅ Milestone 1: Core Pipeline
 
 **Deliverables:**
 1. PDF ingestion and validation
@@ -1316,7 +1318,7 @@ If used in clinical workflows, maintain:
 
 ---
 
-### ✅ Milestone 2: Rendering & UI (Weeks 3-4)
+### ✅ Milestone 2: Rendering & UI
 
 **Deliverables:**
 1. Gemini 2.5 Flash medical structuring
@@ -1336,20 +1338,20 @@ If used in clinical workflows, maintain:
 
 ---
 
-### 🔄 Milestone 3: Production Hardening (Week 5)
+### 🔄 Milestone 3: Production Hardening
 
 **Deliverables:**
 1. Comprehensive error handling
 2. Logging and observability
 3. Performance optimization
-4. Documentation (all 7 docs)
-5. Clinical validation (20 real documents)
+4. Documentation (user guide + architecture)
+5. Testing and validation
 6. Deployment package
 
 **Acceptance Criteria:**
 - 85%+ test coverage
 - All documentation complete
-- Client sign-off on accuracy
+- Client sign-off on functionality
 - Zero critical bugs
 - Performance benchmarks met
 
@@ -1423,7 +1425,7 @@ except Exception as e:
 - [ ] Processes mixed handwritten + printed PDFs
 - [ ] Handles all edge cases documented in Section 9
 - [ ] Outputs valid canonical JSON (schema v2.0)
-- [ ] Outputs valid CCD/CCDA XML
+- [ ] Outputs CCD/CCDA-style XML (structure-compatible)
 - [ ] Outputs professional PDF report
 - [ ] Outputs editable DOCX report
 - [ ] Streamlit UI functional (upload → download)
@@ -1456,9 +1458,9 @@ except Exception as e:
 - [ ] Inline code comments for complex logic
 
 ### Validation & Sign-Off
-- [ ] Internal testing: 50 documents processed
-- [ ] Clinical review: 20% spot-checked, 90%+ accuracy
-- [ ] Client UAT: 10 documents processed successfully
+- [ ] Internal testing complete with sample documents
+- [ ] Edge case handling verified
+- [ ] Client UAT: Representative documents processed successfully
 - [ ] Client sign-off received
 
 ### Deployment Readiness
