@@ -148,12 +148,26 @@ class OCRService:
                 raw_text = response.text if hasattr(response, 'text') and response.text else ""
             else:
                 # Legacy API with safety settings for medical content
-                safety_settings = {
-                    genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-                    genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-                    genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
-                    genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-                }
+                from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+                safety_settings = [
+                    {
+                        "category": HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        "threshold": HarmBlockThreshold.BLOCK_NONE,
+                    },
+                    {
+                        "category": HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        "threshold": HarmBlockThreshold.BLOCK_NONE,
+                    },
+                    {
+                        "category": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        "threshold": HarmBlockThreshold.BLOCK_NONE,
+                    },
+                    {
+                        "category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        "threshold": HarmBlockThreshold.BLOCK_NONE,
+                    },
+                ]
 
                 response = self.model.generate_content(
                     [prompt, image],
