@@ -1,10 +1,10 @@
 # PDF Processing
 pypdf==4.0.1
 pdf2image==1.17.0
-Pillow==10.2.0
+Pillow==10.4.0
 
 # Google Gemini API
-google-generativeai==0.3.2
+google-generativeai==0.8.3
 
 # Data Validation & Schema
 pydantic==2.5.3
@@ -35,7 +35,14 @@ pytest==7.4.4
 pytest-cov==4.1.0
 pytest-mock==3.12.0
 
-# Code Quality
+# Code Quality (optional - for development)
 black==24.1.1
 ruff==0.1.15
 mypy==1.8.0
+
+# Windows-specific note:
+# If you encounter Pillow build errors on Windows:
+# 1. Update pip: python -m pip install --upgrade pip
+# 2. Install wheel: pip install wheel
+# 3. Install Pillow separately: pip install Pillow --upgrade
+# 4. Then install remaining requirements
