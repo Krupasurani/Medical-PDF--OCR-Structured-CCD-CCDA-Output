@@ -77,10 +77,10 @@ class StructuringService:
         # Configure Gemini API
         genai.configure(api_key=self.config.gemini_api_key)
 
-        # Use Gemini 1.5 Flash for structuring (faster, good for structured output)
+        # Model name is configurable via .env file (STRUCTURING_MODEL_NAME)
         try:
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-            logger.info("Structuring service initialized", model="gemini-1.5-flash")
+            self.model = genai.GenerativeModel(self.config.structuring_model_name)
+            logger.info("Structuring service initialized", model=self.config.structuring_model_name)
         except Exception as e:
             logger.error("Failed to initialize structuring model", error=str(e))
             raise StructuringError(f"Model initialization failed: {e}")
