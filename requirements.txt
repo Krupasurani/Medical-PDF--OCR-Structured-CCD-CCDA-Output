@@ -3,8 +3,8 @@ pypdf==4.0.1
 pdf2image==1.17.0
 Pillow>=10.0.0
 
-# Google Gemini API
-google-generativeai>=0.8.0
+# Google Gemini API (updated package)
+google-genai>=0.2.0
 
 # Data Validation & Schema (using newer versions with pre-built wheels)
 pydantic>=2.10.0
