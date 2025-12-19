@@ -8,7 +8,15 @@ import base64
 import io
 from typing import Dict, List
 
-import google.generativeai as genai
+try:
+    from google import genai
+    from google.genai import types
+    USING_NEW_API = True
+except ImportError:
+    # Fallback to old API if new one not available
+    import google.generativeai as genai
+    USING_NEW_API = False
+
 from PIL import Image
 
 from ..utils.config import get_config
@@ -51,17 +59,19 @@ class OCRService:
         self.config = get_config()
 
         # Configure Gemini API
-        genai.configure(api_key=self.config.gemini_api_key)
-
-        # Use Gemini 3 Preview for vision OCR
-        # Note: Adjust model name based on actual Gemini 3 availability
-        # Fallback to gemini-1.5-pro-vision if gemini-3-preview not available yet
-        try:
-            self.model = genai.GenerativeModel('gemini-1.5-pro-latest')  # Vision capable
-            logger.info("OCR service initialized", model="gemini-1.5-pro-latest")
-        except Exception as e:
-            logger.error("Failed to initialize OCR model", error=str(e))
-            raise OCRError(f"Model initialization failed: {e}")
+        # Model name is configurable via .env file (OCR_MODEL_NAME)
+        if USING_NEW_API:
+            self.client = genai.Client(api_key=self.config.gemini_api_key)
+            self.model_name = self.config.ocr_model_name
+            logger.info("OCR service initialized (new API)", model=self.model_name)
+        else:
+            genai.configure(api_key=self.config.gemini_api_key)
+            try:
+                self.model = genai.GenerativeModel(self.config.ocr_model_name)
+                logger.info("OCR service initialized (legacy API)", model=self.config.ocr_model_name)
+            except Exception as e:
+                logger.error("Failed to initialize OCR model", error=str(e))
+                raise OCRError(f"Model initialization failed: {e}")
 
     def _image_to_base64(self, image: Image.Image) -> str:
         """Convert PIL Image to base64 string
@@ -105,18 +115,31 @@ class OCRService:
             prompt = f"{OCR_SYSTEM_PROMPT}\n\nExtract all text from this medical document page."
 
             # Call Gemini Vision API
-            response = self.model.generate_content(
-                [prompt, image],
-                generation_config=genai.GenerationConfig(
-                    temperature=0.0,  # Deterministic output
-                    top_p=1.0,
-                    top_k=1,
-                    max_output_tokens=4096,
-                ),
-            )
-
-            # Extract text from response
-            raw_text = response.text if response.text else ""
+            if USING_NEW_API:
+                # New API
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=[prompt, image],
+                    config=types.GenerateContentConfig(
+                        temperature=0.0,
+                        top_p=1.0,
+                        top_k=1,
+                        max_output_tokens=4096,
+                    )
+                )
+                raw_text = response.text if hasattr(response, 'text') and response.text else ""
+            else:
+                # Legacy API
+                response = self.model.generate_content(
+                    [prompt, image],
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.0,
+                        top_p=1.0,
+                        top_k=1,
+                        max_output_tokens=4096,
+                    ),
+                )
+                raw_text = response.text if response.text else ""
 
             # Estimate confidence (Gemini doesn't provide confidence scores directly)
             # Use heuristics: length, presence of [UNCLEAR] markers

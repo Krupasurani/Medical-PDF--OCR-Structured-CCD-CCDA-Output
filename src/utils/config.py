@@ -18,6 +18,10 @@ class Config(BaseSettings):
     # API Keys
     gemini_api_key: str
 
+    # Model Configuration
+    ocr_model_name: str = "gemini-1.5-pro"
+    structuring_model_name: str = "gemini-1.5-flash"
+
     # Optional Settings
     debug: bool = False
     max_file_size_mb: int = 50
