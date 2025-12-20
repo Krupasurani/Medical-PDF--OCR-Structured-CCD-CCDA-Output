@@ -173,94 +173,60 @@ def demonstrate_pipeline(pdf_path: str, output_dir: str):
     print("   • Vital signs (BP, HR, temp, etc.)")
     print("   • Assessment and plan\n")
 
-    # Create a sample structured output to demonstrate
+    # MILESTONE 1: NO STRUCTURING - Only show what COULD be extracted
+    # This is a TEMPLATE showing the JSON schema structure
+    # Real values will come from Gemini 2.5 Flash in full pipeline
+
     sample_json = {
         "schema_version": "2.0",
         "document_metadata": {
             "source_filename": Path(pdf_path).name,
             "total_pages": len(ocr_results),
             "processing_date": "2025-12-20",
-            "ocr_engine": "gemini-3-pro-preview"
+            "ocr_engine": "gemini-3-pro-preview",
+            "note": "DEMO - Milestone 1 shows OCR only. Structuring requires full pipeline."
         },
         "visits": [
             {
                 "visit_id": "visit_001",
-                "visit_date": "2024-11-15",
-                "reason_for_visit": "Follow-up for endocrine evaluation",
-                "raw_source_pages": [1],
-                "medications": [
-                    {
-                        "name": "Example Medication",
-                        "dose": "50mg",
-                        "frequency": "Once daily",
-                        "source_page": 1
-                    }
-                ],
-                "problem_list": [
-                    {
-                        "problem": "Psychogenic Polydipsia",
-                        "status": "active",
-                        "source_page": 1
-                    },
-                    {
-                        "problem": "Reactive Hypoglycemia w Anxiety",
-                        "status": "active",
-                        "source_page": 1
-                    }
-                ],
-                "results": [
-                    {
-                        "test_name": "24h Urine Catecholamines",
-                        "value": "ok",
-                        "unit": "",
-                        "reference_range": "",
-                        "source_page": 1
-                    },
-                    {
-                        "test_name": "Cortisol",
-                        "value": "52.9",
-                        "unit": "",
-                        "reference_range": "normal",
-                        "source_page": 1
-                    },
-                    {
-                        "test_name": "Chromogranin A",
-                        "value": "68",
-                        "unit": "",
-                        "reference_range": "normal",
-                        "source_page": 1
-                    }
-                ],
-                "vital_signs": {
-                    "heart_rate": {
-                        "value": "S1 S2 nl",
-                        "source_page": 1
-                    }
-                },
-                "assessment": "Psychogenic Polydipsia, Possible Reactive Hypoglycemia with Anxiety",
-                "plan": [
-                    {
-                        "action": "Decrease fluid intake to < 2000 ml/day",
-                        "source_page": 1
-                    },
-                    {
-                        "action": "Reassure patient",
-                        "source_page": 1
-                    },
-                    {
-                        "action": "Return in 8 weeks for U/A, I&O, Chemistry panel",
-                        "source_page": 1
-                    }
-                ],
-                "manual_review_required": False,
-                "review_reasons": []
+                "visit_date": None,  # Will be extracted in full pipeline
+                "reason_for_visit": None,  # Will be extracted in full pipeline
+                "raw_source_pages": [1, 2, 3, 4, 5],
+                "medications": [],  # Will be extracted in full pipeline
+                "problem_list": [],  # Will be extracted in full pipeline
+                "results": [],  # Will be extracted in full pipeline
+                "vital_signs": {},  # Will be extracted in full pipeline
+                "assessment": None,  # Will be extracted in full pipeline
+                "plan": [],  # Will be extracted in full pipeline
+                "manual_review_required": True,
+                "review_reasons": [
+                    "Milestone 1 demo - no structuring performed",
+                    f"Page 4 has low confidence ({[r for r in ocr_results if r['page_number']==4][0]['confidence_score']:.0%})",
+                    f"Average OCR confidence: {avg_confidence:.0%}"
+                ]
             }
         ],
         "data_quality": {
             "ocr_confidence_avg": round(avg_confidence, 2),
             "unclear_sections_count": sum(r['raw_text'].count('[UNCLEAR') for r in ocr_results),
-            "manual_review_required": False,
-            "validation_warnings": []
+            "manual_review_required": True,
+            "validation_warnings": [
+                "This is a TEMPLATE schema - no actual data extracted",
+                "Run main.py for full structuring pipeline",
+                "Milestone 1 focuses on OCR quality, not structuring"
+            ]
+        },
+        "raw_ocr_summary": {
+            "total_characters": sum(len(r['raw_text']) for r in ocr_results),
+            "pages": [
+                {
+                    "page": r['page_number'],
+                    "confidence": r['confidence_score'],
+                    "text_length": len(r['raw_text']),
+                    "has_unclear": '[UNCLEAR' in r['raw_text']
+                }
+                for r in ocr_results
+            ]
         }
     }
 
@@ -318,10 +284,10 @@ def demonstrate_pipeline(pdf_path: str, output_dir: str):
     print(f"{Colors.BOLD}Key Metrics:{Colors.END}")
     print(f"   • Pages processed: {len(ocr_results)}")
     print(f"   • Average OCR confidence: {avg_confidence:.2%}")
-    print(f"   • Total visits extracted: {len(sample_json['visits'])}")
-    print(f"   • Total medications: {sum(len(v.get('medications', [])) for v in sample_json['visits'])}")
-    print(f"   • Total problems: {sum(len(v.get('problem_list', [])) for v in sample_json['visits'])}")
-    print(f"   • Total lab results: {sum(len(v.get('results', [])) for v in sample_json['visits'])}")
+    print(f"   • Total characters extracted: {sum(len(r['raw_text']) for r in ocr_results)}")
+    print(f"   • Pages needing review: {sum(1 for r in ocr_results if r['confidence_score'] < 0.65)}")
+    print(f"   • [UNCLEAR] markers: {sum(r['raw_text'].count('[UNCLEAR') for r in ocr_results)}")
+    print(f"\n{Colors.YELLOW}Note: Milestone 1 = OCR only. No structuring performed.{Colors.END}")
 
     print(f"\n{Colors.BOLD}{Colors.GREEN}✓ SUCCESS!{Colors.END}")
     print(f"\n{Colors.CYAN}Next Steps:{Colors.END}")

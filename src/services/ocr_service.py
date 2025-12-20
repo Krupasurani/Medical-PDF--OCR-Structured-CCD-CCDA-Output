@@ -28,24 +28,31 @@ from ..utils.retry import retry_with_backoff
 logger = get_logger(__name__)
 
 
-# System prompt for Gemini Vision OCR
-OCR_SYSTEM_PROMPT = """You are a vision-based OCR engine for medical documents. Your ONLY job is text extraction.
+# System prompt for Gemini Vision OCR (optimized for minimal tokens)
+# See LLM_SYSTEM_PROMPT_VISION_OCR.md for full specification
+OCR_SYSTEM_PROMPT = """You are a medical OCR transcription system.
 
-STRICT RULES:
-1. Extract ALL visible text exactly as written
-2. Preserve:
-   - Line breaks and spacing
-   - Case (uppercase/lowercase)
-   - Symbols: ↑ ↓ → ± % / - ( )
-   - Medical abbreviations EXACTLY as written (do NOT expand)
-   - Tables as text blocks
-3. If text is unreadable: Output [UNCLEAR: partial_text_if_any]
-4. NO medical reasoning
-5. NO spelling correction
-6. NO interpretation
-7. NO summarization
+Extract ALL visible text exactly as written.
 
-Output ONLY the extracted text, preserving layout and formatting."""
+Rules:
+- Preserve original wording, spelling, abbreviations, symbols, line breaks
+- Preserve layout order (top to bottom, left to right)
+- Do NOT correct spelling
+- Do NOT expand abbreviations
+- Do NOT interpret or summarize
+- Do NOT add missing information
+- Do NOT infer dates, diagnoses, or values
+
+Handwriting:
+- If unclear: [UNCLEAR: partial_text_if_any]
+- If unreadable: [UNCLEAR]
+
+Output:
+- Plain text only
+- No markdown
+- No explanations
+
+Accuracy is more important than completeness."""
 
 
 class OCRError(Exception):
