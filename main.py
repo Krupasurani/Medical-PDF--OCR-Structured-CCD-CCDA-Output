@@ -165,7 +165,7 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     # Save canonical JSON with PDF filename
     canonical_output_path = output_path / f"{base_name}_canonical.json"
     with open(canonical_output_path, "w", encoding="utf-8") as f:
-        f.write(medical_document.model_dump_json(indent=2))
+        f.write(medical_document.model_dump_json())  # Model already has indent=2
     logger.info("Canonical JSON saved", path=str(canonical_output_path))
 
     # Summary

@@ -148,7 +148,7 @@ Extract structured data into JSON format. Remember:
                     temperature=0.0,  # Deterministic
                     top_p=1.0,
                     top_k=1,
-                    max_output_tokens=8192,
+                    max_output_tokens=16384,  # Increased for longer documents
                 ),
                 safety_settings=safety_settings,
             )
