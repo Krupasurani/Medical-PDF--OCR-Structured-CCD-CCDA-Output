@@ -28,31 +28,39 @@ from ..utils.retry import retry_with_backoff
 logger = get_logger(__name__)
 
 
-# System prompt for Gemini Vision OCR (optimized for minimal tokens)
+# System prompt for Gemini Vision OCR (AGGRESSIVE extraction - preserve everything)
 # See LLM_SYSTEM_PROMPT_VISION_OCR.md for full specification
 OCR_SYSTEM_PROMPT = """You are a medical OCR transcription system.
 
-Extract ALL visible text exactly as written.
+Extract ALL visible text letter-by-letter, line-by-line.
+
+CRITICAL: Extract EVERYTHING you see, even if handwriting is unclear.
+- Go character-by-character
+- Preserve ALL spacing, line breaks, symbols
+- Make best-guess for unclear letters
+- ONLY use [UNCLEAR] if pixels are literally missing/illegible
+- Do NOT judge medical meaning - just extract visual characters
 
 Rules:
-- Preserve original wording, spelling, abbreviations, symbols, line breaks
+- Preserve original spelling, abbreviations, symbols exactly
 - Preserve layout order (top to bottom, left to right)
 - Do NOT correct spelling
 - Do NOT expand abbreviations
 - Do NOT interpret or summarize
-- Do NOT add missing information
-- Do NOT infer dates, diagnoses, or values
+- Do NOT skip unclear sections - TRY to extract them
 
-Handwriting:
-- If unclear: [UNCLEAR: partial_text_if_any]
-- If unreadable: [UNCLEAR]
+For handwriting:
+- Extract letter-by-letter even if uncertain
+- Preserve cursive as best-guess characters
+- Only use [UNCLEAR] if completely illegible (blurred/missing pixels)
 
 Output:
 - Plain text only
 - No markdown
 - No explanations
+- Extract everything you visually see
 
-Accuracy is more important than completeness."""
+Completeness is priority - downstream processing will validate context."""
 
 
 class OCRError(Exception):
@@ -274,18 +282,27 @@ class OCRService:
             raise OCRError(f"Failed to extract text from page {page_number}: {e}")
 
     def _estimate_confidence(self, text: str) -> float:
-        """Estimate OCR confidence based on heuristics"""
+        """Estimate OCR confidence based on heuristics
+
+        Note: With aggressive extraction strategy, [UNCLEAR] is rare and means
+        truly illegible (missing pixels). Most uncertain text is still extracted.
+        """
         if not text or len(text) < 10:
             return 0.0
 
+        # [UNCLEAR] is now rare - only for truly illegible sections
         unclear_count = text.count("[UNCLEAR")
-        confidence = 1.0 - min(0.9, unclear_count * 0.15)
 
+        # Penalize heavily since [UNCLEAR] means real illegibility
+        confidence = 1.0 - min(0.95, unclear_count * 0.25)
+
+        # Short text may be legitimate (e.g., brief notes)
         if len(text) < 50:
-            confidence *= 0.7
+            confidence *= 0.8
 
+        # Blocked responses are critical failures
         if "blocked" in text.lower() or "safety filter" in text.lower():
-            confidence *= 0.3
+            confidence *= 0.2
 
         return round(confidence, 2)
 
