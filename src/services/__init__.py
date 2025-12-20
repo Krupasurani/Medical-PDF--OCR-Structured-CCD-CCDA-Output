@@ -11,3 +11,22 @@ __all__ = [
     "ChunkingService",
     "StructuringService",
 ]
+
+
+# """Services module"""
+
+# from .pdf_service import PDFService
+# from .ocr_service import EnhancedOCRService
+# from .chunking_service import ChunkingService
+# from .structuring_service import StructuringService
+
+# # Backward compatibility alias
+# OCRService = EnhancedOCRService
+
+# __all__ = [
+#     'PDFService',
+#     'EnhancedOCRService',
+#     'OCRService',
+#     'ChunkingService',
+#     'StructuringService',
+# ]

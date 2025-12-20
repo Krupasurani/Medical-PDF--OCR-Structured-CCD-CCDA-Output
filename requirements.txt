@@ -45,3 +45,4 @@ mypy>=1.8.0
 # 1. Use pre-built wheels only: pip install --only-binary :all: -r requirements.txt
 # 2. Or upgrade pip: python -m pip install --upgrade pip setuptools wheel
 # 3. For pdf2image, you need poppler: conda install -c conda-forge poppler
+
