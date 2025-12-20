@@ -90,7 +90,7 @@ def demonstrate_pipeline(pdf_path: str, output_dir: str):
     print_success(f"PDF validated successfully!")
     print(f"   • File size: {pdf_data['metadata']['file_size_mb']:.2f} MB")
     print(f"   • Total pages: {pdf_data['metadata']['page_count']}")
-    print(f"   • Encrypted: {pdf_data['metadata']['is_encrypted']}")
+    print(f"   • Encrypted: {pdf_data['metadata'].get('is_encrypted', False)}")
 
     # ============================================================================
     # STEP 2: OCR - TEXT EXTRACTION FROM IMAGES
