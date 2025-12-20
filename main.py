@@ -43,11 +43,16 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     """
     start_time = time.time()
 
+    # Get base filename (without extension) for output naming
+    input_file = Path(input_path)
+    base_name = input_file.stem.replace(" ", "_").replace("(", "").replace(")", "")
+
     logger.info("=" * 60)
     logger.info("MEDICAL PDF PROCESSING PIPELINE - MILESTONE 1")
     logger.info("=" * 60)
     logger.info("Input file", path=input_path)
     logger.info("Output directory", path=output_dir)
+    logger.info("Base output name", name=base_name)
 
     # Create output directory
     output_path = Path(output_dir)
@@ -70,7 +75,7 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
 
     # Step 2: OCR (Vision-based text extraction)
     logger.info("-" * 60)
-    logger.info("STEP 2: OCR (GEMINI 3 PREVIEW - VISION)")
+    logger.info("STEP 2: OCR (GEMINI 3 PRO PREVIEW - AGGRESSIVE EXTRACTION)")
     logger.info("-" * 60)
 
     ocr_service = OCRService()
@@ -83,11 +88,22 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
         avg_confidence=round(avg_confidence, 2),
     )
 
-    # Save OCR results (debug)
+    # MILESTONE 1: Save raw OCR outputs per page (client deliverable)
+    logger.info("Saving raw OCR outputs per page...")
+    ocr_files = []
+    for result in ocr_results:
+        page_num = result["page_number"]
+        ocr_file = output_path / f"{base_name}_page_{page_num}_ocr.txt"
+        with open(ocr_file, "w", encoding="utf-8") as f:
+            f.write(result["raw_text"])
+        ocr_files.append(str(ocr_file))
+        logger.info(f"  • Page {page_num} OCR saved", path=ocr_file.name)
+
+    # Save OCR results summary (debug)
     if get_config().debug:
-        ocr_output_path = output_path / "debug_ocr_results.json"
-        with open(ocr_output_path, "w") as f:
-            json.dump(ocr_results, f, indent=2)
+        ocr_output_path = output_path / f"{base_name}_debug_ocr_results.json"
+        with open(ocr_output_path, "w", encoding="utf-8") as f:
+            json.dump(ocr_results, f, indent=2, ensure_ascii=False)
         logger.info("OCR debug output saved", path=str(ocr_output_path))
 
     # Step 3: Chunking (Visit detection)
@@ -106,14 +122,14 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
 
     # Save chunks (debug)
     if get_config().debug:
-        chunks_output_path = output_path / "debug_chunks.json"
+        chunks_output_path = output_path / f"{base_name}_debug_chunks.json"
         # Remove raw_text for brevity
         chunks_clean = [
             {k: v for k, v in c.items() if k != "raw_text"}
             for c in chunks
         ]
-        with open(chunks_output_path, "w") as f:
-            json.dump(chunks_clean, f, indent=2)
+        with open(chunks_output_path, "w", encoding="utf-8") as f:
+            json.dump(chunks_clean, f, indent=2, ensure_ascii=False)
         logger.info("Chunks debug output saved", path=str(chunks_output_path))
 
     # Step 4: Structuring (Canonical JSON)
@@ -136,15 +152,15 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     )
 
     # Step 5: Save Canonical JSON
-  
     logger.info("-" * 60)
-    logger.info("STEP 5: SAVE CANONICAL JSON")
+    logger.info("STEP 5: SAVE OUTPUTS")
     logger.info("-" * 60)
 
-    canonical_output_path = output_path / "canonical.json"
-    with open(canonical_output_path, "w", encoding="utf-8") as f:  # ← ADD encoding="utf-8"
-        f.write(medical_document.model_dump_json())
-        logger.info("Canonical JSON saved", path=str(canonical_output_path))
+    # Save canonical JSON with PDF filename
+    canonical_output_path = output_path / f"{base_name}_canonical.json"
+    with open(canonical_output_path, "w", encoding="utf-8") as f:
+        f.write(medical_document.model_dump_json(indent=2))
+    logger.info("Canonical JSON saved", path=str(canonical_output_path))
 
     # Summary
     logger.info("=" * 60)
@@ -154,18 +170,24 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     logger.info(f"  • Input: {input_path}")
     logger.info(f"  • Pages processed: {medical_document.page_count}")
     logger.info(f"  • Visits detected: {len(medical_document.visits)}")
-    logger.info(f"  • OCR confidence: {medical_document.ocr_confidence_avg:.2f}")
+    logger.info(f"  • OCR confidence: {medical_document.ocr_confidence_avg:.2%}")
     logger.info(f"  • Processing time: {processing_duration_ms / 1000:.1f}s")
-    logger.info(f"  • Output: {canonical_output_path}")
+    logger.info("")
+    logger.info("Output Files:")
+    logger.info(f"  • Canonical JSON: {canonical_output_path.name}")
+    logger.info(f"  • Raw OCR outputs: {len(ocr_files)} files ({base_name}_page_N_ocr.txt)")
 
     if medical_document.warnings:
+        logger.warning("")
         logger.warning("Warnings:", count=len(medical_document.warnings))
         for warning in medical_document.warnings:
             logger.warning(f"  • {warning}")
 
     return {
         "success": True,
-        "output_file": str(canonical_output_path),
+        "base_name": base_name,
+        "canonical_json": str(canonical_output_path),
+        "ocr_files": ocr_files,
         "metadata": {
             "pages": medical_document.page_count,
             "visits": len(medical_document.visits),
@@ -213,8 +235,21 @@ Examples:
         result = process_medical_pdf(args.input, args.output)
 
         if result["success"]:
-            print("\n✓ Processing completed successfully!")
-            print(f"✓ Output saved to: {result['output_file']}")
+            print("\n" + "=" * 70)
+            print("✓ MILESTONE 1: PROCESSING COMPLETED SUCCESSFULLY!")
+            print("=" * 70)
+            print(f"\nOutput Files (Base name: {result['base_name']}):")
+            print(f"  • Canonical JSON: {result['canonical_json']}")
+            print(f"  • Raw OCR files:  {len(result['ocr_files'])} pages")
+            for ocr_file in result['ocr_files']:
+                print(f"    - {Path(ocr_file).name}")
+            print(f"\nQuality Metrics:")
+            print(f"  • Pages processed: {result['metadata']['pages']}")
+            print(f"  • OCR confidence:  {result['metadata']['confidence']:.2%}")
+            print(f"  • Visits detected: {result['metadata']['visits']}")
+            print(f"  • Processing time: {result['metadata']['processing_time_ms']/1000:.1f}s")
+            print("\n✓ Ready for client delivery!")
+            print("=" * 70)
             sys.exit(0)
         else:
             print("\n✗ Processing failed")
