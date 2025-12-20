@@ -41,6 +41,13 @@ CRITICAL: Extract EVERYTHING you see, even if handwriting is unclear.
 - ONLY use [UNCLEAR] if pixels are literally missing/illegible
 - Do NOT judge medical meaning - just extract visual characters
 
+SYMBOLS TO EXTRACT:
+- Checkmarks/tick marks: Extract as ✓ or [✓] or "checked"
+- Boxes: ☐ (empty box) or ☑ (checked box)
+- Arrows: ↑ ↓ → ←
+- Medical: ± ° % / - ( )
+- Other marks: * # @ & etc.
+
 Rules:
 - Preserve original spelling, abbreviations, symbols exactly
 - Preserve layout order (top to bottom, left to right)
@@ -58,7 +65,7 @@ Output:
 - Plain text only
 - No markdown
 - No explanations
-- Extract everything you visually see
+- Extract everything you visually see including all checkmarks and symbols
 
 Completeness is priority - downstream processing will validate context."""
 
