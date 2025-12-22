@@ -28,8 +28,13 @@ ABSOLUTE RULES:
 4. NO medical reasoning or interpretation
 5. NO expanding abbreviations (keep "HTN", "DM2" as-is)
 6. If text is unclear or missing: use null or [UNCLEAR]
-7. Track source page numbers for ALL data
+7. Track source page numbers AND line numbers for ALL data
 8. Preserve all conflicts - never auto-resolve
+
+ENTERPRISE IMPROVEMENT #2: Source Traceability
+- For EVERY extracted field, include the exact text snippet from OCR
+- Include line number where the text appears
+- Format: "source_excerpt": "exact text from line X"
 
 OUTPUT SCHEMA:
 Return ONLY valid JSON following this structure:
@@ -41,17 +46,40 @@ Return ONLY valid JSON following this structure:
       "reason_for_visit": "exact text",
       "history_of_present_illness": "exact text",
       "medications": [
-        {"name": "exact text", "dose": "exact text", "source_page": 1}
+        {
+          "name": "exact text",
+          "dose": "exact text",
+          "source_page": 1,
+          "source_line": 15,
+          "source_excerpt": "exact 40-char snippet from OCR"
+        }
       ],
       "problem_list": [
-        {"problem": "exact text", "source_page": 1}
+        {
+          "problem": "exact text",
+          "source_page": 1,
+          "source_line": 20,
+          "source_excerpt": "exact 40-char snippet from OCR"
+        }
       ],
       "results": [
-        {"test_name": "exact text", "value": "exact text", "unit": "exact text", "source_page": 1}
+        {
+          "test_name": "exact text",
+          "value": "exact text",
+          "unit": "exact text",
+          "source_page": 1,
+          "source_line": 25,
+          "source_excerpt": "exact 40-char snippet from OCR"
+        }
       ],
       "assessment": "exact text",
       "plan": [
-        {"action": "exact text", "source_page": 1}
+        {
+          "action": "exact text",
+          "source_page": 1,
+          "source_line": 30,
+          "source_excerpt": "exact 40-char snippet from OCR"
+        }
       ],
       "raw_source_pages": [1, 2],
       "manual_review_required": false,
@@ -105,17 +133,22 @@ class StructuringService:
         logger.info("Structuring visit", visit_id=chunk["visit_id"], pages=chunk["pages"])
 
         try:
+            # Prepare line-numbered OCR text for better traceability
+            lines = chunk['raw_text'].split('\n')
+            line_numbered_text = '\n'.join([f"{i+1:4d}| {line}" for i, line in enumerate(lines)])
+
             # Prepare prompt
             prompt = f"""{STRUCTURING_SYSTEM_PROMPT}
 
-OCR TEXT (from pages {chunk['pages']}):
-{chunk['raw_text']}
+OCR TEXT WITH LINE NUMBERS (from pages {chunk['pages']}):
+{line_numbered_text}
 
 Extract structured data into JSON format. Remember:
 - Preserve exact wording (no corrections)
 - Use null for missing data
 - Mark unclear sections with [UNCLEAR]
-- Track source pages for every field
+- Track source pages AND line numbers for every field
+- Include exact text excerpts (40-60 chars) for traceability
 - Visit ID: {chunk['visit_id']}
 - Source pages: {chunk['pages']}
 """
@@ -183,6 +216,9 @@ Extract structured data into JSON format. Remember:
             visit_data.setdefault("visit_id", chunk["visit_id"])
             visit_data.setdefault("raw_source_pages", chunk["pages"])
             visit_data.setdefault("visit_date", chunk.get("visit_date"))
+
+            # Enterprise Improvement #2: Enrich with source excerpts if missing
+            visit_data = self._enrich_source_excerpts(visit_data, chunk['raw_text'])
 
             logger.info(
                 "Visit structuring complete",
@@ -263,3 +299,64 @@ Extract structured data into JSON format. Remember:
         except Exception as e:
             logger.error("Document structuring failed", error=str(e))
             raise StructuringError(f"Failed to structure document: {e}")
+
+    def _enrich_source_excerpts(self, visit_data: Dict, ocr_text: str) -> Dict:
+        """Enrich structured data with source excerpts if missing
+
+        ENTERPRISE IMPROVEMENT #2: Ensure every data point has exact source traceability
+        - Find exact text in OCR
+        - Add line number
+        - Add 50-char excerpt for context
+        """
+        lines = ocr_text.split('\n')
+
+        def find_excerpt(text_to_find: str) -> Dict[str, any]:
+            """Find text in OCR and return line number + excerpt"""
+            if not text_to_find or text_to_find == "N/A" or text_to_find == "null":
+                return {}
+
+            # Search for text in lines
+            for line_num, line in enumerate(lines, start=1):
+                if text_to_find.lower() in line.lower():
+                    # Found it! Extract 50-char context
+                    start_idx = max(0, line.lower().find(text_to_find.lower()) - 10)
+                    end_idx = min(len(line), start_idx + 60)
+                    excerpt = line[start_idx:end_idx].strip()
+
+                    return {
+                        "source_line": line_num,
+                        "source_excerpt": excerpt[:60]  # Cap at 60 chars
+                    }
+
+            # Not found - return empty
+            return {}
+
+        # Enrich medications
+        for med in visit_data.get("medications", []):
+            if "source_line" not in med or "source_excerpt" not in med:
+                med_name = med.get("name", "")
+                enrichment = find_excerpt(med_name)
+                med.update(enrichment)
+
+        # Enrich problems
+        for problem in visit_data.get("problem_list", []):
+            if "source_line" not in problem or "source_excerpt" not in problem:
+                problem_text = problem.get("problem", "")
+                enrichment = find_excerpt(problem_text)
+                problem.update(enrichment)
+
+        # Enrich results
+        for result in visit_data.get("results", []):
+            if "source_line" not in result or "source_excerpt" not in result:
+                test_name = result.get("test_name", "")
+                enrichment = find_excerpt(test_name)
+                result.update(enrichment)
+
+        # Enrich plan items
+        for plan_item in visit_data.get("plan", []):
+            if "source_line" not in plan_item or "source_excerpt" not in plan_item:
+                action = plan_item.get("action", "")
+                enrichment = find_excerpt(action)
+                plan_item.update(enrichment)
+
+        return visit_data

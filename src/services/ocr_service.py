@@ -260,6 +260,13 @@ class OCRService:
             # Estimate confidence
             confidence_score = self._estimate_confidence(raw_text)
 
+            # Extract uncertain tokens (Enterprise Improvement #1)
+            uncertain_tokens = self._extract_uncertain_tokens(raw_text)
+
+            # Determine if manual review is needed
+            manual_review_needed = self._should_flag_for_review(confidence_score, uncertain_tokens)
+            review_reasons = self._get_review_reasons(confidence_score, uncertain_tokens, raw_text)
+
             # Detect layout
             layout_hints = self._analyze_layout(raw_text)
 
@@ -268,6 +275,10 @@ class OCRService:
                 "raw_text": raw_text,
                 "confidence_score": confidence_score,
                 "layout_hints": layout_hints,
+                # NEW: Honest uncertainty tracking
+                "uncertain_tokens": uncertain_tokens,
+                "manual_review_required": manual_review_needed,
+                "review_reasons": review_reasons,
             }
 
             logger.info(
@@ -275,6 +286,8 @@ class OCRService:
                 page=page_number,
                 text_length=len(raw_text),
                 confidence=confidence_score,
+                uncertain_tokens=len(uncertain_tokens),
+                manual_review=manual_review_needed,
             )
 
             return result
@@ -289,29 +302,173 @@ class OCRService:
             raise OCRError(f"Failed to extract text from page {page_number}: {e}")
 
     def _estimate_confidence(self, text: str) -> float:
-        """Estimate OCR confidence based on heuristics
+        """Estimate OCR confidence with realistic scoring
 
-        Note: With aggressive extraction strategy, [UNCLEAR] is rare and means
-        truly illegible (missing pixels). Most uncertain text is still extracted.
+        CRITICAL CHANGE (Enterprise Improvement #1):
+        - No longer reports unrealistic 100% confidence
+        - Honest assessment of handwriting, poor scans, ambiguous characters
+        - Typically returns 0.60-0.85 for real-world medical notes
         """
         if not text or len(text) < 10:
             return 0.0
 
-        # [UNCLEAR] is now rare - only for truly illegible sections
+        # Start with realistic base confidence for medical OCR
+        # Real-world medical notes with handwriting: 65-75% is honest
+        base_confidence = 0.70
+
+        # [UNCLEAR] markers indicate truly illegible sections
         unclear_count = text.count("[UNCLEAR")
+        if unclear_count > 0:
+            base_confidence -= min(0.40, unclear_count * 0.15)
 
-        # Penalize heavily since [UNCLEAR] means real illegibility
-        confidence = 1.0 - min(0.95, unclear_count * 0.25)
+        # Handwriting indicators (common in medical notes)
+        handwriting_indicators = [
+            "unclear", "illegible", "scribbled", "hard to read",
+            "(?)", "[?]", "~~~", "***"
+        ]
+        handwriting_score = sum(1 for indicator in handwriting_indicators if indicator in text.lower())
+        if handwriting_score > 0:
+            base_confidence -= min(0.15, handwriting_score * 0.05)
 
-        # Short text may be legitimate (e.g., brief notes)
+        # Ambiguous characters that OCR struggles with
+        # l vs I vs 1, O vs 0, rn vs m, etc.
+        ambiguous_patterns = text.count("l") + text.count("I") + text.count("1") + text.count("O") + text.count("0")
+        total_chars = len(text.replace(" ", "").replace("\n", ""))
+        if total_chars > 0:
+            ambiguous_ratio = ambiguous_patterns / total_chars
+            if ambiguous_ratio > 0.15:  # More than 15% ambiguous characters
+                base_confidence -= 0.08
+
+        # Very short text is harder to validate
         if len(text) < 50:
-            confidence *= 0.8
+            base_confidence *= 0.85
+
+        # Long documents with consistent formatting are slightly more reliable
+        if len(text) > 500 and text.count("\n") > 10:
+            base_confidence += 0.05
 
         # Blocked responses are critical failures
         if "blocked" in text.lower() or "safety filter" in text.lower():
-            confidence *= 0.2
+            base_confidence = 0.15
+
+        # Medical abbreviations increase uncertainty slightly
+        # (OCR can extract them but may be ambiguous)
+        medical_abbrev_count = sum(1 for word in text.split() if word.isupper() and 2 <= len(word) <= 5)
+        if medical_abbrev_count > 5:
+            base_confidence -= 0.05
+
+        # Cap confidence at realistic maximum (85% for best-case handwritten medical notes)
+        max_confidence = 0.85 if "[UNCLEAR" not in text else 0.75
+        confidence = min(max_confidence, max(0.15, base_confidence))
 
         return round(confidence, 2)
+
+    def _extract_uncertain_tokens(self, text: str) -> List[Dict[str, str]]:
+        """Extract uncertain tokens with context for manual review
+
+        ENTERPRISE IMPROVEMENT #1: Track exactly which tokens are uncertain
+        """
+        uncertain_tokens = []
+
+        # Extract [UNCLEAR] markers with context
+        lines = text.split("\n")
+        for line_num, line in enumerate(lines, start=1):
+            if "[UNCLEAR" in line:
+                # Extract the unclear section and surrounding context
+                start_idx = max(0, line.find("[UNCLEAR") - 20)
+                end_idx = min(len(line), line.find("]", line.find("[UNCLEAR")) + 21)
+                context = line[start_idx:end_idx].strip()
+
+                uncertain_tokens.append({
+                    "line_number": line_num,
+                    "token": line[line.find("[UNCLEAR"):line.find("]", line.find("[UNCLEAR")) + 1],
+                    "context": context,
+                    "reason": "illegible_handwriting"
+                })
+
+        # Detect ambiguous medical abbreviations (could be multiple things)
+        common_ambiguous = {
+            "MS": "Multiple Sclerosis OR Mitral Stenosis OR Morphine Sulfate",
+            "PC": "Post-Cibum (after meals) OR Presenting Complaint",
+            "RA": "Rheumatoid Arthritis OR Right Atrium",
+            "AS": "Aortic Stenosis OR Ankylosing Spondylitis",
+            "BS": "Bowel Sounds OR Blood Sugar OR Breath Sounds",
+        }
+
+        for line_num, line in enumerate(lines, start=1):
+            for abbrev, meanings in common_ambiguous.items():
+                if f" {abbrev} " in f" {line} " or line.startswith(f"{abbrev} ") or line.endswith(f" {abbrev}"):
+                    uncertain_tokens.append({
+                        "line_number": line_num,
+                        "token": abbrev,
+                        "context": line.strip()[:60],
+                        "reason": f"ambiguous_abbreviation: {meanings}"
+                    })
+
+        # Detect handwritten sections (likely lower confidence)
+        handwriting_indicators = ["(?)", "[?]", "~~~", "possibly", "unclear", "illegible"]
+        for line_num, line in enumerate(lines, start=1):
+            for indicator in handwriting_indicators:
+                if indicator in line.lower():
+                    uncertain_tokens.append({
+                        "line_number": line_num,
+                        "token": indicator,
+                        "context": line.strip()[:60],
+                        "reason": "handwriting_uncertainty"
+                    })
+
+        return uncertain_tokens[:20]  # Limit to top 20 for readability
+
+    def _should_flag_for_review(self, confidence: float, uncertain_tokens: List) -> bool:
+        """Determine if page needs manual review
+
+        ENTERPRISE IMPROVEMENT #1: Clear criteria for when human review is needed
+        """
+        # Low confidence threshold
+        if confidence < 0.60:
+            return True
+
+        # Many uncertain tokens
+        if len(uncertain_tokens) > 5:
+            return True
+
+        # Critical uncertainty (illegible sections)
+        critical_uncertainties = [t for t in uncertain_tokens if "illegible" in t.get("reason", "")]
+        if len(critical_uncertainties) > 2:
+            return True
+
+        return False
+
+    def _get_review_reasons(self, confidence: float, uncertain_tokens: List, text: str) -> List[str]:
+        """Get specific reasons why manual review is recommended
+
+        ENTERPRISE IMPROVEMENT #1: Explain exactly why review is needed
+        """
+        reasons = []
+
+        if confidence < 0.60:
+            reasons.append(f"Low OCR confidence: {confidence:.1%} (threshold: 60%)")
+
+        if confidence < 0.75 and len(text) > 100:
+            reasons.append(f"Moderate confidence on substantial content: {confidence:.1%}")
+
+        unclear_count = text.count("[UNCLEAR")
+        if unclear_count > 0:
+            reasons.append(f"{unclear_count} illegible section(s) marked as [UNCLEAR]")
+
+        handwriting_tokens = [t for t in uncertain_tokens if "handwriting" in t.get("reason", "")]
+        if len(handwriting_tokens) > 3:
+            reasons.append(f"{len(handwriting_tokens)} sections with handwriting uncertainty")
+
+        ambiguous_tokens = [t for t in uncertain_tokens if "ambiguous" in t.get("reason", "")]
+        if len(ambiguous_tokens) > 2:
+            reasons.append(f"{len(ambiguous_tokens)} ambiguous medical abbreviations detected")
+
+        # Very short extraction might mean missing content
+        if len(text) < 100:
+            reasons.append(f"Very short extraction ({len(text)} characters) - may indicate scan quality issues")
+
+        return reasons
 
     def _analyze_layout(self, text: str) -> Dict[str, bool]:
         """Analyze text layout characteristics"""
