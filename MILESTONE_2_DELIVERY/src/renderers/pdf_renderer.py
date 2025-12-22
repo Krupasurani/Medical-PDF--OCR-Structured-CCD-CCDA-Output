@@ -149,7 +149,7 @@ class PDFRenderer:
             ["DOB:", str(document.document_metadata.dob) if document.document_metadata.dob else "Unknown"],
             ["Sex:", document.document_metadata.sex or "Unknown"],
             ["Document Type:", document.document_metadata.document_type or "Mixed"],
-            ["Generated:", document.document_metadata.processing_metadata.processed_at.strftime("%Y-%m-%d %H:%M:%S")],
+            ["Generated:", document.processed_at.strftime("%Y-%m-%d %H:%M:%S")],
             ["Source:", "OCR-processed medical record"],
         ]
 
@@ -401,9 +401,9 @@ of patient information for clinical decision-making. Always refer to original so
 
         # Quality metrics
         quality_data = [
-            ["OCR Confidence (Average):", f"{document.document_metadata.processing_metadata.ocr_confidence_avg * 100:.1f}%"],
-            ["Pages Processed:", str(document.document_metadata.processing_metadata.page_count)],
-            ["Processing Duration:", f"{document.document_metadata.processing_metadata.processing_duration_ms / 1000:.2f} seconds"],
+            ["OCR Confidence (Average):", f"{document.ocr_confidence_avg * 100:.1f}%"],
+            ["Pages Processed:", str(document.page_count)],
+            ["Processing Duration:", f"{document.processing_duration_ms / 1000:.2f} seconds" if document.processing_duration_ms else "N/A"],
         ]
 
         table = Table(quality_data, colWidths=[2*inch, 3*inch])
