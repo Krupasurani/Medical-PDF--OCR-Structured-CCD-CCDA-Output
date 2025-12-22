@@ -94,7 +94,7 @@ class XMLRenderer:
         effective_time = SubElement(root, "effectiveTime")
         effective_time.set(
             "value",
-            document.document_metadata.processing_metadata.processed_at.strftime("%Y%m%d%H%M%S")
+            document.processed_at.strftime("%Y%m%d%H%M%S")
         )
 
         # Confidentiality code
