@@ -77,7 +77,7 @@ class PDFRenderer:
 
         # Normal body text
         self.styles.add(ParagraphStyle(
-            name='BodyText',
+            name='ClientBodyText',
             parent=self.styles['Normal'],
             fontSize=11,
             textColor=colors.black,
@@ -181,23 +181,23 @@ class PDFRenderer:
         # Patient info table (2 columns, 3 rows)
         patient_data = [
             [
-                Paragraph("<b>Patient</b>", self.styles['BodyText']),
-                Paragraph(f"<b>Document Date</b> {visit_date}", self.styles['BodyText'])
+                Paragraph("<b>Patient</b>", self.styles['ClientBodyText']),
+                Paragraph(f"<b>Document Date</b> {visit_date}", self.styles['ClientBodyText'])
             ],
             [
-                Paragraph(document.document_metadata.patient_name or "{{PATIENT_NAME}}", self.styles['BodyText']),
+                Paragraph(document.document_metadata.patient_name or "{{PATIENT_NAME}}", self.styles['ClientBodyText']),
                 ""
             ],
             [
-                Paragraph(f"DOB: {document.document_metadata.dob or '{{DOB}}'}", self.styles['BodyText']),
-                Paragraph(f"Sex: {document.document_metadata.sex or '{{SEX}}'}", self.styles['BodyText'])
+                Paragraph(f"DOB: {document.document_metadata.dob or '{{DOB}}'}", self.styles['ClientBodyText']),
+                Paragraph(f"Sex: {document.document_metadata.sex or '{{SEX}}'}", self.styles['ClientBodyText'])
             ],
         ]
 
         # Add author/organization row if available
         author_org = f"Author / Organization: {document.document_metadata.organization or 'OCR Processing System'}"
         patient_data.append([
-            Paragraph(author_org, self.styles['BodyText']),
+            Paragraph(author_org, self.styles['ClientBodyText']),
             ""
         ])
 
@@ -221,7 +221,7 @@ class PDFRenderer:
         story.append(Paragraph(title, self.styles['SectionHeading']))
 
         # Content
-        story.append(Paragraph(content, self.styles['BodyText']))
+        story.append(Paragraph(content, self.styles['ClientBodyText']))
         story.append(Spacer(1, 0.05*inch))
 
     def _add_problem_list_client(self, story: List, problems: List[Dict[str, Any]]):
@@ -235,7 +235,7 @@ class PDFRenderer:
             problem_text = f"• {problem.get('problem', '')}"
             if problem.get("status"):
                 problem_text += f" ({problem['status']})"
-            story.append(Paragraph(problem_text, self.styles['BodyText']))
+            story.append(Paragraph(problem_text, self.styles['ClientBodyText']))
 
         story.append(Spacer(1, 0.05*inch))
 
@@ -261,7 +261,7 @@ class PDFRenderer:
             if result.get("abnormal_flag") and result["abnormal_flag"] != "normal":
                 result_text += f" ({result['abnormal_flag']})"
 
-            story.append(Paragraph(result_text, self.styles['BodyText']))
+            story.append(Paragraph(result_text, self.styles['ClientBodyText']))
 
         # Add relevant vital signs if present
         vital_signs = visit.get("vital_signs", {})
@@ -271,7 +271,7 @@ class PDFRenderer:
                     vital_text = f"• {vital_name.replace('_', ' ').title()}: {vital_data['value']}"
                     if vital_data.get("unit"):
                         vital_text += f" {vital_data['unit']}"
-                    story.append(Paragraph(vital_text, self.styles['BodyText']))
+                    story.append(Paragraph(vital_text, self.styles['ClientBodyText']))
 
         story.append(Spacer(1, 0.05*inch))
 
@@ -284,7 +284,7 @@ class PDFRenderer:
 
         for item in plan:
             plan_text = f"• {item.get('action', '')}"
-            story.append(Paragraph(plan_text, self.styles['BodyText']))
+            story.append(Paragraph(plan_text, self.styles['ClientBodyText']))
 
         story.append(Spacer(1, 0.05*inch))
 
