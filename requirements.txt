@@ -13,6 +13,7 @@ jsonschema>=4.20.0
 
 # XML Processing
 lxml>=5.0.0
+xmlschema>=3.0.0
 
 # Document Generation
 reportlab>=4.0.0

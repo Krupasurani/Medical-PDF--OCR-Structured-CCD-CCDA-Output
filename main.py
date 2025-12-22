@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Medical PDF Processing Pipeline - Main Entry Point
+Medical PDF Processing Pipeline - Main Entry Point (Milestone 2)
 
 This script processes medical PDFs through the complete pipeline:
 1. PDF validation and ingestion
 2. OCR (Gemini 3 Preview)
 3. Chunking (visit detection)
 4. Structuring (Gemini 2.5 Flash → Canonical JSON)
+5. Deduplication & Merge
+6. Rendering (XML, PDF, DOCX)
 
 Usage:
     python main.py --input sample.pdf --output output/
@@ -22,6 +24,10 @@ from src.services.pdf_service import PDFService, PDFValidationError
 from src.services.ocr_service import OCRService, OCRError
 from src.services.chunking_service import ChunkingService
 from src.services.structuring_service import StructuringService, StructuringError
+from src.services.deduplication_service import DeduplicationService
+from src.renderers.xml_renderer import XMLRenderer
+from src.renderers.pdf_renderer import PDFRenderer
+from src.renderers.docx_renderer import DOCXRenderer
 from src.utils.config import get_config
 from src.utils.logger import get_logger
 
@@ -48,7 +54,7 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     base_name = input_file.stem.replace(" ", "_").replace("(", "").replace(")", "")
 
     logger.info("=" * 60)
-    logger.info("MEDICAL PDF PROCESSING PIPELINE - MILESTONE 1")
+    logger.info("MEDICAL PDF PROCESSING PIPELINE - MILESTONE 2 (Complete)")
     logger.info("=" * 60)
     logger.info("Input file", path=input_path)
     logger.info("Output directory", path=output_dir)
@@ -157,9 +163,22 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
         processing_time_sec=round(processing_duration_ms / 1000, 1),
     )
 
-    # Step 5: Save Canonical JSON
+    # Step 5: Deduplication & Merge (Milestone 2)
     logger.info("-" * 60)
-    logger.info("STEP 5: SAVE OUTPUTS")
+    logger.info("STEP 5: DEDUPLICATION & MERGE")
+    logger.info("-" * 60)
+
+    deduplication_service = DeduplicationService(fuzzy_threshold=0.85)
+    deduplicated_visits = deduplication_service.deduplicate_document(
+        [visit.model_dump() if hasattr(visit, 'model_dump') else visit for visit in medical_document.visits]
+    )
+    medical_document.visits = deduplicated_visits
+
+    logger.info("Deduplication complete")
+
+    # Step 6: Save Canonical JSON
+    logger.info("-" * 60)
+    logger.info("STEP 6: SAVE CANONICAL JSON (SOURCE OF TRUTH)")
     logger.info("-" * 60)
 
     # Save canonical JSON with PDF filename
@@ -167,6 +186,34 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     with open(canonical_output_path, "w", encoding="utf-8") as f:
         f.write(medical_document.model_dump_json())  # Model already has indent=2
     logger.info("Canonical JSON saved", path=str(canonical_output_path))
+
+    # Step 7: Render Outputs (Milestone 2)
+    logger.info("-" * 60)
+    logger.info("STEP 7: RENDER OUTPUTS (XML, PDF, DOCX)")
+    logger.info("-" * 60)
+
+    # Render XML (CCD/CCDA-style)
+    logger.info("Rendering CCD/CCDA XML...")
+    xml_renderer = XMLRenderer()
+    xml_output_path = output_path / f"{base_name}_ccd.xml"
+    xml_content = xml_renderer.render(medical_document)
+    with open(xml_output_path, "w", encoding="utf-8") as f:
+        f.write(xml_content)
+    logger.info(f"  • CCD/CCDA XML saved: {xml_output_path.name}")
+
+    # Render PDF (Human-readable)
+    logger.info("Rendering human-readable PDF...")
+    pdf_renderer = PDFRenderer()
+    pdf_output_path = output_path / f"{base_name}_report.pdf"
+    pdf_renderer.render(medical_document, str(pdf_output_path))
+    logger.info(f"  • Human-readable PDF saved: {pdf_output_path.name}")
+
+    # Render DOCX (Editable)
+    logger.info("Rendering editable DOCX...")
+    docx_renderer = DOCXRenderer()
+    docx_output_path = output_path / f"{base_name}_report.docx"
+    docx_renderer.render(medical_document, str(docx_output_path))
+    logger.info(f"  • Editable DOCX saved: {docx_output_path.name}")
 
     # Summary
     logger.info("=" * 60)
@@ -182,6 +229,9 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
     logger.info("Output Files:")
     logger.info(f"  • Canonical JSON: {canonical_output_path.name}")
     logger.info(f"  • Raw OCR (all pages): {ocr_output_file.name}")
+    logger.info(f"  • CCD/CCDA XML: {xml_output_path.name}")
+    logger.info(f"  • Human-readable PDF: {pdf_output_path.name}")
+    logger.info(f"  • Editable DOCX: {docx_output_path.name}")
 
     if medical_document.warnings:
         logger.warning("")
@@ -194,6 +244,9 @@ def process_medical_pdf(input_path: str, output_dir: str) -> dict:
         "base_name": base_name,
         "canonical_json": str(canonical_output_path),
         "ocr_file": str(ocr_output_file),
+        "xml_file": str(xml_output_path),
+        "pdf_file": str(pdf_output_path),
+        "docx_file": str(docx_output_path),
         "metadata": {
             "pages": medical_document.page_count,
             "visits": len(medical_document.visits),
