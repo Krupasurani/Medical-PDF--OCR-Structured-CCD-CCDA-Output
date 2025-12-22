@@ -92,7 +92,7 @@ class DOCXRenderer:
             str(document.document_metadata.dob) if document.document_metadata.dob else "Unknown",
             document.document_metadata.sex or "Unknown",
             document.document_metadata.document_type or "Mixed",
-            document.document_metadata.processing_metadata.processed_at.strftime("%Y-%m-%d %H:%M:%S"),
+            document.processed_at.strftime("%Y-%m-%d %H:%M:%S"),
             "OCR-processed medical record",
         ]
 
@@ -340,13 +340,14 @@ class DOCXRenderer:
         # Quality metrics
         p = doc.add_paragraph()
         p.add_run("OCR Confidence (Average): ").bold = True
-        p.add_run(f"{document.document_metadata.processing_metadata.ocr_confidence_avg * 100:.1f}%\n")
+        p.add_run(f"{document.ocr_confidence_avg * 100:.1f}%\n")
 
         p.add_run("Pages Processed: ").bold = True
-        p.add_run(f"{document.document_metadata.processing_metadata.page_count}\n")
+        p.add_run(f"{document.page_count}\n")
 
         p.add_run("Processing Duration: ").bold = True
-        p.add_run(f"{document.document_metadata.processing_metadata.processing_duration_ms / 1000:.2f} seconds\n")
+        duration_text = f"{document.processing_duration_ms / 1000:.2f} seconds\n" if document.processing_duration_ms else "N/A\n"
+        p.add_run(duration_text)
 
         doc.add_paragraph()
 
