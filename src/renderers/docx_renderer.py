@@ -90,8 +90,8 @@ class DOCXRenderer:
         values = [
             document.document_metadata.patient_name or "Unknown",
             str(document.document_metadata.dob) if document.document_metadata.dob else "Unknown",
-            document.document_metadata.sex or "Unknown",
-            document.document_metadata.document_type or "Mixed",
+            str(document.document_metadata.sex) if document.document_metadata.sex else "Unknown",
+            str(document.document_metadata.document_type) if document.document_metadata.document_type else "Mixed",
             document.processed_at.strftime("%Y-%m-%d %H:%M:%S"),
             "OCR-processed medical record",
         ]
@@ -99,7 +99,7 @@ class DOCXRenderer:
         for i, (header, value) in enumerate(zip(headers, values)):
             row = table.rows[i]
             row.cells[0].text = header
-            row.cells[1].text = value
+            row.cells[1].text = str(value)  # Ensure it's a string
 
             # Bold headers
             run = row.cells[0].paragraphs[0].runs[0]
@@ -141,7 +141,7 @@ class DOCXRenderer:
             for label, value in demo_items:
                 p = doc.add_paragraph()
                 p.add_run(f"{label} ").bold = True
-                p.add_run(value)
+                p.add_run(str(value) if value is not None else "N/A")
         else:
             doc.add_paragraph("No patient demographics available")
 
@@ -161,13 +161,13 @@ class DOCXRenderer:
             ("Visit ID:", visit.get("visit_id", "N/A")),
             ("Visit Date:", visit.get("visit_date", "N/A")),
             ("Encounter Type:", visit.get("encounter_type", "N/A")),
-            ("Source Pages:", ", ".join(map(str, visit.get("raw_source_pages", [])))),
+            ("Source Pages:", ", ".join(map(str, visit.get("raw_source_pages", []))) or "N/A"),
         ]
 
         for i, (label, value) in enumerate(metadata):
             row = table.rows[i]
             row.cells[0].text = label
-            row.cells[1].text = value
+            row.cells[1].text = str(value) if value is not None else "N/A"
             row.cells[0].paragraphs[0].runs[0].bold = True
 
         doc.add_paragraph()
