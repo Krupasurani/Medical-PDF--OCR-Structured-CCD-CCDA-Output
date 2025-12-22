@@ -1,0 +1,49 @@
+# PDF Processing
+pypdf==4.0.1
+pdf2image==1.17.0
+Pillow>=10.0.0
+
+# Google Gemini API (updated package)
+google-genai>=0.2.0
+
+# Data Validation & Schema (using newer versions with pre-built wheels)
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+jsonschema>=4.20.0
+
+# XML Processing
+lxml>=5.0.0
+xmlschema>=3.0.0
+
+# Document Generation
+reportlab>=4.0.0
+python-docx>=1.0.0
+jinja2>=3.1.0
+
+# UI (Milestone 2)
+streamlit>=1.30.0
+
+# Utilities
+python-dateutil>=2.8.0
+python-dotenv>=1.0.0
+tenacity>=8.2.0
+
+# Logging
+structlog>=24.1.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Code Quality (optional - for development)
+black>=24.0.0
+ruff>=0.1.0
+mypy>=1.8.0
+
+# Windows Installation Notes:
+# If you still encounter build errors:
+# 1. Use pre-built wheels only: pip install --only-binary :all: -r requirements.txt
+# 2. Or upgrade pip: python -m pip install --upgrade pip setuptools wheel
+# 3. For pdf2image, you need poppler: conda install -c conda-forge poppler
+
