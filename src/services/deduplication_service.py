@@ -16,7 +16,13 @@ logger = get_logger(__name__)
 
 
 class DeduplicationService:
-    """Handle deduplication and merging of medical data"""
+    """Handle deduplication and merging of medical data
+
+    ENTERPRISE IMPROVEMENT #3: Explainable deduplication
+    - All merge decisions are logged with clear reasons
+    - Rule-based approach (not "magic LLM")
+    - Deduplication log accessible in output
+    """
 
     def __init__(self, fuzzy_threshold: float = 0.85):
         """Initialize deduplication service
@@ -25,6 +31,7 @@ class DeduplicationService:
             fuzzy_threshold: Similarity threshold for fuzzy matching (default: 0.85)
         """
         self.fuzzy_threshold = fuzzy_threshold
+        self.deduplication_log = []  # NEW: Track all merge decisions
         logger.info("Deduplication service initialized", fuzzy_threshold=fuzzy_threshold)
 
     def normalize_text(self, text: str) -> str:
@@ -138,6 +145,17 @@ class DeduplicationService:
                     matched_indices.add(j)
                     logger.debug("Exact medication match", name=name1, pages=list(source_pages))
 
+                    # Log merge decision (ENTERPRISE IMPROVEMENT #3)
+                    self.deduplication_log.append({
+                        "type": "medication",
+                        "action": "merged",
+                        "reason": "exact_name_match",
+                        "item1": name1,
+                        "item2": name2,
+                        "source_pages": [med1.get("source_page"), med2.get("source_page")],
+                        "details": f"Merged '{name1}' with '{name2}' (exact match after normalization)"
+                    })
+
                 # Fuzzy match
                 else:
                     is_match, similarity = self.is_fuzzy_match(name1, name2)
@@ -154,6 +172,19 @@ class DeduplicationService:
                             base_med["alternative_representations"].append(name2)
                         source_pages.add(med2.get("source_page"))
                         matched_indices.add(j)
+
+                        # Log merge decision (ENTERPRISE IMPROVEMENT #3)
+                        self.deduplication_log.append({
+                            "type": "medication",
+                            "action": "merged",
+                            "reason": "fuzzy_match",
+                            "item1": name1,
+                            "item2": name2,
+                            "similarity": round(similarity, 2),
+                            "threshold": self.fuzzy_threshold,
+                            "source_pages": [med1.get("source_page"), med2.get("source_page")],
+                            "details": f"Merged '{name1}' with '{name2}' (fuzzy match: {similarity:.1%} similarity, threshold: {self.fuzzy_threshold:.1%})"
+                        })
 
             # Update source pages
             base_med["source_pages"] = sorted(list(source_pages))
@@ -243,6 +274,17 @@ class DeduplicationService:
                     matched_indices.add(j)
                     logger.debug("Exact problem match", problem=text1, pages=list(source_pages))
 
+                    # Log merge decision (ENTERPRISE IMPROVEMENT #3)
+                    self.deduplication_log.append({
+                        "type": "problem",
+                        "action": "merged",
+                        "reason": "exact_text_match",
+                        "item1": text1,
+                        "item2": text2,
+                        "source_pages": [prob1.get("source_page"), prob2.get("source_page")],
+                        "details": f"Merged problem '{text1}' with '{text2}' (exact match)"
+                    })
+
                 # Fuzzy match
                 else:
                     is_match, similarity = self.is_fuzzy_match(text1, text2)
@@ -267,6 +309,19 @@ class DeduplicationService:
                         base_problem = self._merge_problem_entries(base_problem, prob2)
                         source_pages.add(prob2.get("source_page"))
                         matched_indices.add(j)
+
+                        # Log merge decision (ENTERPRISE IMPROVEMENT #3)
+                        self.deduplication_log.append({
+                            "type": "problem",
+                            "action": "merged",
+                            "reason": "fuzzy_match",
+                            "item1": text1,
+                            "item2": text2,
+                            "similarity": round(similarity, 2),
+                            "threshold": self.fuzzy_threshold,
+                            "source_pages": [prob1.get("source_page"), prob2.get("source_page")],
+                            "details": f"Merged problem '{text1}' with '{text2}' (fuzzy match: {similarity:.1%} similarity)"
+                        })
 
             base_problem["source_pages"] = sorted(list(source_pages))
             merged.append(base_problem)
@@ -466,3 +521,31 @@ class DeduplicationService:
         logger.info("Document deduplication complete", total_visits=len(deduplicated_visits))
 
         return deduplicated_visits
+
+    def get_deduplication_log(self) -> List[Dict[str, Any]]:
+        """Get the deduplication log with all merge decisions
+
+        ENTERPRISE IMPROVEMENT #3: Explainable deduplication
+        Returns detailed log of all merge decisions with clear reasons
+
+        Returns:
+            List of deduplication log entries
+
+        Example entry:
+        {
+            "type": "medication",
+            "action": "merged",
+            "reason": "fuzzy_match",
+            "item1": "Metformin 500mg",
+            "item2": "Metformin 500 mg",
+            "similarity": 0.92,
+            "threshold": 0.85,
+            "source_pages": [1, 3],
+            "details": "Merged 'Metformin 500mg' with 'Metformin 500 mg' (fuzzy match: 92% similarity)"
+        }
+        """
+        return self.deduplication_log
+
+    def clear_deduplication_log(self):
+        """Clear the deduplication log (call before processing new document)"""
+        self.deduplication_log = []
