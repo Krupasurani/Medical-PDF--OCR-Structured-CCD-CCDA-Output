@@ -281,11 +281,22 @@ Extract structured data into JSON format. Remember:
                 ocr["confidence_score"] for ocr in ocr_results
             ) / len(ocr_results) if ocr_results else 0.0
 
+            # Combine raw OCR text from all pages for LLM-based rendering
+            raw_ocr_text = ""
+            for result in ocr_results:
+                page_num = result.get("page_number", result.get("page", 0))
+                raw_ocr_text += f"\n{'=' * 80}\n"
+                raw_ocr_text += f"PAGE {page_num}\n"
+                raw_ocr_text += f"{'=' * 80}\n\n"
+                raw_ocr_text += result.get("raw_text", result.get("text", ""))
+                raw_ocr_text += "\n\n"
+
             # Create MedicalDocument
             document = MedicalDocument(
                 visits=visits_data,
                 page_count=len(ocr_results),
                 ocr_confidence_avg=round(avg_confidence, 2),
+                raw_ocr_text=raw_ocr_text.strip(),  # Store complete OCR text
             )
 
             logger.info(

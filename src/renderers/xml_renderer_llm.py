@@ -25,15 +25,20 @@ logger = get_logger(__name__)
 # CCD/CCDA XML Generation Prompt
 CCD_GENERATION_PROMPT = """# CCD/CCDA XML Generation Task
 
-You are generating a CCD/CCDA R2.1 compliant XML document from medical data extracted from handwritten notes.
+You are generating a CCD/CCDA R2.1 compliant XML document from medical data.
+
+**INPUT**: You will receive EITHER raw OCR text from medical documents OR structured JSON data.
+- If receiving OCR text: Extract relevant medical information and structure it into the XML format
+- If receiving JSON: Use the structured data to populate the XML template
 
 ## CRITICAL REQUIREMENTS
 
 1. **Generate BOTH narrative text AND structured entries** for each section
 2. **Use exact template structure** provided below
 3. **NO medical code guessing** - use only text descriptions when codes are unknown
-4. **Preserve clinical uncertainty** - keep "??" and "R/O" notations exactly as written
+4. **Preserve clinical uncertainty** - keep "??", "?", "R/O", "[UNCLEAR]" notations exactly as written
 5. **Return ONLY valid XML** - no explanations, no markdown, just the XML
+6. **Extract from OCR text**: When given OCR text, identify clinical sections (Reason for Visit, HPI, Problem List, Results, Assessment, Plan) and extract information accordingly
 
 ---
 
@@ -289,18 +294,33 @@ class XMLRenderer:
         logger.info("Rendering document to XML (LLM-based)", visits=len(document.visits))
 
         try:
-            # Prepare simplified data for LLM
-            llm_input = self._prepare_llm_input(document)
-
             # Generate timestamp
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-            # Build prompt
-            prompt = f"""{CCD_GENERATION_PROMPT}
+            # Use raw OCR text if available, otherwise fall back to JSON
+            if document.raw_ocr_text:
+                logger.info("Using raw OCR text for XML generation (preferred - more context)")
+
+                # Build prompt with raw OCR text
+                prompt = f"""{CCD_GENERATION_PROMPT}
 
 TIMESTAMP: {timestamp}
 
-INPUT DATA (JSON):
+INPUT DATA (RAW OCR TEXT FROM MEDICAL DOCUMENT):
+{document.raw_ocr_text}
+
+Generate the complete CCD/CCDA XML document now. Output ONLY the XML, no explanations.
+"""
+            else:
+                logger.info("Using canonical JSON for XML generation (fallback - less context)")
+                llm_input = self._prepare_llm_input(document)
+
+                # Build prompt with JSON
+                prompt = f"""{CCD_GENERATION_PROMPT}
+
+TIMESTAMP: {timestamp}
+
+INPUT DATA (CANONICAL JSON):
 ```json
 {json.dumps(llm_input, indent=2)}
 ```
