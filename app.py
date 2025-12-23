@@ -102,8 +102,9 @@ def process_pdf(uploaded_file, progress_bar, status_text):
         status_text.text("📄 Step 1/6: Validating PDF...")
         progress_bar.progress(10)
 
-        page_count = st.session_state.pdf_service.get_page_count(str(pdf_path))
-        file_size_mb = uploaded_file.size / (1024 * 1024)
+        pdf_data = st.session_state.pdf_service.process_pdf(str(pdf_path))
+        page_count = pdf_data["metadata"]["page_count"]
+        file_size_mb = pdf_data["metadata"]["file_size_mb"]
 
         if page_count > 100:
             raise ValueError(f"PDF has {page_count} pages (max 100 allowed)")
@@ -114,21 +115,15 @@ def process_pdf(uploaded_file, progress_bar, status_text):
         status_text.text(f"🔍 Step 2/6: OCR Processing ({page_count} pages)...")
         progress_bar.progress(20)
 
-        ocr_results = []
-        for page_num in range(1, page_count + 1):
-            status_text.text(f"🔍 Step 2/6: OCR Processing (Page {page_num}/{page_count})...")
-            progress_bar.progress(20 + int((page_num / page_count) * 30))
+        ocr_results = st.session_state.ocr_service.process_pages(pdf_data["images"])
 
-            page_result = st.session_state.ocr_service.process_page(str(pdf_path), page_num)
-            ocr_results.append(page_result)
-
-            time.sleep(0.1)  # Brief pause for UI update
+        progress_bar.progress(50)
 
         # Step 3: Chunking
         status_text.text("📋 Step 3/6: Identifying visits...")
         progress_bar.progress(60)
 
-        chunks = st.session_state.chunking_service.chunk_by_visit(ocr_results)
+        chunks = st.session_state.chunking_service.chunk_pages(ocr_results)
         logger.info("Chunking complete", visits=len(chunks))
 
         # Step 4: Structuring
