@@ -217,6 +217,16 @@ Extract structured data into JSON format. Remember:
             visit_data.setdefault("raw_source_pages", chunk["pages"])
             visit_data.setdefault("visit_date", chunk.get("visit_date"))
 
+            # Fix: Convert None to empty strings for string fields (Pydantic v2 strict typing)
+            string_fields = [
+                "reason_for_visit",
+                "history_of_present_illness",
+                "assessment"
+            ]
+            for field in string_fields:
+                if visit_data.get(field) is None:
+                    visit_data[field] = ""
+
             # Enterprise Improvement #2: Enrich with source excerpts if missing
             visit_data = self._enrich_source_excerpts(visit_data, chunk['raw_text'])
 
