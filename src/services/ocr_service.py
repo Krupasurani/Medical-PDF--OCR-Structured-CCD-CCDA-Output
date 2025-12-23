@@ -487,12 +487,26 @@ class OCRService:
 
         return layout_hints
 
-    def process_pages(self, images: List[Image.Image]) -> List[Dict[str, any]]:
-        """Process multiple pages"""
+    def process_pages(self, images: List[Image.Image], progress_callback=None) -> List[Dict[str, any]]:
+        """Process multiple pages
+
+        Args:
+            images: List of PIL Image objects
+            progress_callback: Optional callback function(page_num, total_pages) for progress tracking
+
+        Returns:
+            List of OCR results
+        """
         logger.info("Processing pages", total_pages=len(images), model=self.model_name)
 
         results = []
+        total_pages = len(images)
+
         for i, image in enumerate(images, start=1):
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(i, total_pages)
+
             try:
                 ocr_result = self.extract_text_from_image(image, page_number=i)
                 results.append(ocr_result)

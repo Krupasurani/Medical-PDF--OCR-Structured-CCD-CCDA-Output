@@ -96,11 +96,18 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
         pdf_data = pdf_service.process_pdf(str(temp_input))
 
         # Step 2: OCR (40%)
-        status_text.text(f"🔍 OCR Processing ({pdf_data['metadata']['page_count']} pages)...")
+        total_pages = pdf_data['metadata']['page_count']
+        status_text.text(f"🔍 OCR Processing ({total_pages} pages)...")
         progress_bar.progress(10)
 
+        # Progress callback for OCR
+        def ocr_progress_callback(page_num, total):
+            progress = 10 + int(30 * page_num / total)  # 10% to 40%
+            progress_bar.progress(progress)
+            status_text.text(f"🔍 OCR Processing page {page_num}/{total}...")
+
         ocr_service = OCRService()
-        ocr_results = ocr_service.process_pages(pdf_data["images"])
+        ocr_results = ocr_service.process_pages(pdf_data["images"], progress_callback=ocr_progress_callback)
 
         # Track OCR tokens (estimate based on text length)
         for result in ocr_results:
