@@ -31,6 +31,15 @@ ABSOLUTE RULES:
 7. Track source page numbers AND line numbers for ALL data
 8. Preserve all conflicts - never auto-resolve
 
+JSON FORMATTING RULES (CRITICAL):
+- Escape all special characters in strings
+- Replace " with \\" in all text values
+- Replace \\ with \\\\ in all text values
+- Replace newlines with \\n
+- Ensure all strings are properly closed with "
+- DO NOT truncate strings - complete all text values
+- If a value is very long, include it fully or use null
+
 ENTERPRISE IMPROVEMENT #2: Source Traceability
 - For EVERY extracted field, include the exact text snippet from OCR
 - Include line number where the text appears
@@ -88,7 +97,11 @@ Return ONLY valid JSON following this structure:
   ]
 }
 
-CRITICAL: Return ONLY the JSON object. No explanations, no markdown formatting."""
+CRITICAL:
+- Return ONLY valid, complete JSON
+- No explanations, no markdown formatting
+- Ensure ALL strings are properly closed
+- Complete all text values, do not truncate"""
 
 
 class StructuringError(Exception):
