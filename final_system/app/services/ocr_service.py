@@ -170,9 +170,20 @@ class OCRService:
                         if hasattr(candidate, 'content') and candidate.content:
                             if hasattr(candidate.content, 'parts'):
                                 raw_text = ''.join(
-                                    part.text for part in candidate.content.parts 
+                                    part.text for part in candidate.content.parts
                                     if hasattr(part, 'text')
                                 )
+
+                    # Extract actual token usage from API response
+                    usage_metadata = {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    }
+                    if hasattr(response, 'usage_metadata'):
+                        usage_metadata["prompt_tokens"] = getattr(response.usage_metadata, 'prompt_token_count', 0)
+                        usage_metadata["completion_tokens"] = getattr(response.usage_metadata, 'candidates_token_count', 0)
+                        usage_metadata["total_tokens"] = getattr(response.usage_metadata, 'total_token_count', 0)
                     
                     # Check for blocking
                     if not raw_text and hasattr(response, 'candidates') and response.candidates:
@@ -246,7 +257,18 @@ class OCRService:
                                 raw_text = f"[UNCLEAR: Page {page_number} - No text extracted]"
                         else:
                             raw_text = f"[UNCLEAR: Page {page_number} - Empty response]"
-                
+
+                    # Extract actual token usage from API response (legacy API)
+                    usage_metadata = {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    }
+                    if hasattr(response, 'usage_metadata'):
+                        usage_metadata["prompt_tokens"] = getattr(response.usage_metadata, 'prompt_token_count', 0)
+                        usage_metadata["completion_tokens"] = getattr(response.usage_metadata, 'candidates_token_count', 0)
+                        usage_metadata["total_tokens"] = getattr(response.usage_metadata, 'total_token_count', 0)
+
                 except Exception as e:
                     logger.error("Legacy API call failed", page=page_number, error=str(e))
                     raise
@@ -279,6 +301,8 @@ class OCRService:
                 "uncertain_tokens": uncertain_tokens,
                 "manual_review_required": manual_review_needed,
                 "review_reasons": review_reasons,
+                # Actual token usage from API
+                "usage_metadata": usage_metadata,
             }
 
             logger.info(
@@ -288,6 +312,8 @@ class OCRService:
                 confidence=confidence_score,
                 uncertain_tokens=len(uncertain_tokens),
                 manual_review=manual_review_needed,
+                prompt_tokens=usage_metadata["prompt_tokens"],
+                completion_tokens=usage_metadata["completion_tokens"],
             )
 
             return result
