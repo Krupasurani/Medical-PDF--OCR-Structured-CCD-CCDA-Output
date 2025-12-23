@@ -1,313 +1,151 @@
-# 🏥 Medical PDF → CCD/CCDA Converter
+# Medical PDF → CCD/CCDA Converter
 
-**Enterprise-grade medical document OCR with LLM-based XML generation**
+Enterprise-grade medical document processing system that converts PDF medical records into standardized HL7 CCD/CCDA XML format with professional human-readable reports.
 
-Convert handwritten and printed medical PDFs to structured CCD/CCDA R2.1 compliant XML using AI-powered OCR and intelligent structuring.
+## Overview
 
----
+This system automates the conversion of medical PDF documents into structured, standards-compliant formats suitable for electronic health record (EHR) integration and clinical review.
 
-## ✨ Features
+### Key Capabilities
 
-### Core Capabilities
-- 🔍 **Advanced OCR**: Gemini 3 Pro Preview for handwritten + printed text
-- 🧠 **AI Structuring**: Gemini 2.5 Flash for medical data extraction
-- 📝 **LLM-based XML**: Uses raw OCR text for accurate CCD/CCDA generation
-- 🎨 **Web UI**: Beautiful Streamlit interface for easy document processing
+- **Intelligent OCR**: Advanced optical character recognition optimized for medical documents including handwritten notes
+- **Automated Structuring**: Extracts medications, diagnoses, lab results, vital signs, and treatment plans
+- **HL7 CCD/CCDA Generation**: Creates standards-compliant XML documents following CCD R2.1 specifications
+- **Professional Reports**: Generates human-readable PDF summaries in clinical consultation format
+- **Multiple Output Formats**: XML (CCD/CCDA), PDF (clinical summary), DOCX (editable report), JSON (structured data)
 
-### Enterprise Features
-✅ **Honest Confidence Scoring** (60-85% realistic range, not false 100%)
-✅ **Source Text Traceability** (line numbers + excerpts for all data)
-✅ **Explainable Deduplication** (rule-based with similarity scores)
-✅ **Practice Fusion CDA R2.1 Compliance** (proper template structure)
+## Quick Start
 
----
+### Prerequisites
 
-## 🚀 Quick Start
+- Python 3.9 or higher
+- Internet connection (for API access)
+- Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
 
-### 1. Installation
+### Installation
 
+**Linux/macOS:**
 ```bash
-# Clone or navigate to final_system directory
-cd final_system
-
-# Install dependencies
-pip install -r requirements.txt
-
-# For Windows users (PDF processing)
-# Download and install Poppler: https://github.com/oschwartz10612/poppler-windows/releases
+./setup.sh
 ```
 
-### 2. Configuration
-
-Create a `.env` file in the `final_system` directory:
-
-```env
-# Required: Google Gemini API Key
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# Optional: Model names (defaults shown)
-OCR_MODEL_NAME=gemini-3-pro-preview
-STRUCTURING_MODEL_NAME=gemini-2.5-flash
-
-# Optional: Debug mode
-DEBUG=false
-```
-
-**Get your Gemini API key:**
-1. Go to https://makersuite.google.com/app/apikey
-2. Create a new API key
-3. Copy and paste into `.env` file
-
-### 3. Run the Application
-
+**Windows:**
 ```bash
-# Start the web UI
-streamlit run app.py
+bash setup.sh
 ```
 
-The application will open in your browser at `http://localhost:8501`
+The setup script will automatically:
+1. Check Python installation
+2. Create virtual environment
+3. Install all dependencies
+4. Create configuration template
 
----
+### Configuration
 
-## 📖 Usage
-
-### Via Web UI (Recommended)
-
-1. **Upload PDF**: Click "Browse files" and select your medical PDF
-2. **Process**: Click "🚀 Process Document"
-3. **Download**: Get your CCD/CCDA XML, PDF report, and DOCX files
-4. **Review**: Check metrics and preview results
-
-### Via Command Line
-
+1. Edit the `.env` file:
 ```bash
-# Process a single document
-python -c "
-from pathlib import Path
-from app.services.pdf_service import PDFService
-from app.services.ocr_service import OCRService
-from app.services.structuring_service import StructuringService
-from app.renderers import XMLRenderer
-
-# Your processing code here
-"
+GEMINI_API_KEY=your-api-key-here
 ```
 
----
+2. (Optional) Customize model settings in `.env` if needed
 
-## 📂 Output Files
+### Running the Application
 
-For each processed document, you'll get:
-
-| File | Description |
-|------|-------------|
-| `*_ccd.xml` | **CCD/CCDA R2.1 XML** - Standards-compliant XML generated from raw OCR text |
-| `*_report.pdf` | **Human-Readable PDF** - Formatted clinical summary (Specialist Consult style) |
-| `*_report.docx` | **Editable DOCX** - Microsoft Word format for editing |
-| `*_canonical.json` | **Canonical JSON** - Structured data (single source of truth) |
-| `*_ocr.txt` | **Raw OCR Text** - Complete OCR output from all pages |
-
----
-
-## 🏗️ System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     PDF Input Document                       │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 1: OCR (Gemini 3 Pro Preview)                         │
-│  • Extract printed + handwritten text                        │
-│  • Realistic confidence scoring (60-85%)                     │
-│  • Mark unclear sections with [UNCLEAR]                      │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 2: Chunking (Visit Detection)                         │
-│  • Detect clinical visit boundaries                          │
-│  • Preserve page-level context                               │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 3: Structuring (Gemini 2.5 Flash)                     │
-│  • Extract medications, problems, results, plan              │
-│  • Add source_page, source_line, source_excerpt              │
-│  • Store raw OCR text for LLM rendering                      │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 4: Deduplication                                       │
-│  • Fuzzy matching with 85% threshold                         │
-│  • Explainable merge logs with similarity scores             │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 5: LLM-Based XML Rendering                            │
-│  • Input: Raw OCR text (complete context)                    │
-│  • Generate: CCD/CCDA R2.1 XML with narrative + entries     │
-│  • Preserve: Clinical uncertainty (??, R/O, [UNCLEAR])      │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 6: Human-Readable Rendering                           │
-│  • PDF: Specialist Consult Summary format                    │
-│  • DOCX: Editable Microsoft Word document                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🔬 Technical Details
-
-### LLM-Based XML Generation
-
-**Why Raw OCR Text?**
-- **More Context**: LLM sees complete original text, not just extracted fields
-- **Better Accuracy**: Preserves formatting, layout, and visual context
-- **Nuance Preservation**: Keeps clinical uncertainty markers and handwritten notes exactly as written
-
-**Process:**
-```
-Raw OCR Text (all pages) → Detailed CCD/CCDA Prompt → Gemini 2.5 Flash
-    ↓
-CCD/CCDA R2.1 XML with:
-  • Proper namespaces (hl7, xsi, sdtc)
-  • Author and Custodian sections
-  • Narrative <text> blocks
-  • Structured <entry> elements
-  • SNOMED/LOINC codes (when available)
-  • Preserved uncertainty markers
-```
-
-### Honest Confidence Scoring
-
-Instead of unrealistic 100% confidence, the system provides:
-
-```python
-Base Confidence: 70%  # Realistic for medical notes
-
-Penalties:
-- [UNCLEAR] markers:      -15% each
-- Handwriting indicators: -5% each
-- Ambiguous characters:   -8% if >15% of text
-- Medical abbreviations:  -5% if >5 detected
-
-Maximum: 85%  # Cap for best-case scenarios
-```
-
-### Source Traceability
-
-Every extracted data point includes:
-```json
-{
-  "name": "Metformin 500mg",
-  "source_page": 2,
-  "source_line": 15,
-  "source_excerpt": "Medications: Metformin 500mg BID po"
-}
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-**"No module named 'app'"**
+**Linux/macOS:**
 ```bash
-# Make sure you're in the final_system directory
-cd final_system
-streamlit run app.py
+./run.sh
 ```
 
-**"Gemini API key not found"**
+**Windows:**
 ```bash
-# Create or update .env file
-echo "GEMINI_API_KEY=your_key_here" > .env
+bash run.sh
 ```
 
-**PDF processing fails on Windows**
-```bash
-# Install Poppler for Windows
-# Download from: https://github.com/oschwartz10612/poppler-windows/releases
-# Add bin directory to PATH
-```
+The web interface will automatically open in your browser at `http://localhost:8501`
 
-**Import errors**
-```bash
-# Reinstall dependencies
-pip install --force-reinstall -r requirements.txt
-```
+## Usage
 
----
+1. **Upload PDF**: Click "Browse files" and select your medical PDF document (max 200MB)
+2. **Process**: Click "Process Document" button
+3. **Download**:
+   - Use "Download All Files (ZIP)" for complete package
+   - Or download individual files (XML, PDF, DOCX, JSON)
 
-## 📊 Performance
+### Processing Time
 
-Typical processing times (5-page document):
-- OCR: ~30-40 seconds
-- Structuring: ~15-20 seconds
-- Rendering: ~5 seconds
-- **Total: ~50-65 seconds**
+Processing time varies by document length:
+- 1-5 pages: 30-60 seconds
+- 6-20 pages: 1-3 minutes
+- 20+ pages: 3-5 minutes
 
----
+## Output Files
 
-## 🔐 Security & Privacy
+For each processed document, the system generates:
 
-- ✅ All processing happens via Google Gemini API
-- ✅ Uploaded files are temporarily stored and deleted after processing
-- ✅ No data is permanently stored on servers
-- ✅ HIPAA considerations: Review Google Gemini's BAA before production use
+| File | Format | Description |
+|------|--------|-------------|
+| `*_ccd.xml` | XML | HL7 CCD/CCDA R2.1 compliant XML document |
+| `*_report.pdf` | PDF | Professional clinical summary report |
+| `*_report.docx` | DOCX | Editable Word document |
+| `*_canonical.json` | JSON | Structured data in canonical format |
+| `*_ocr.txt` | TXT | Raw OCR text from all pages |
 
----
+## System Requirements
 
-## 📋 System Requirements
+### Minimum Requirements
+- **OS**: Windows 10+, macOS 10.15+, or Linux (Ubuntu 20.04+)
+- **RAM**: 4 GB
+- **Disk Space**: 2 GB free space
+- **Internet**: Stable connection required
 
-- **Python**: 3.9 or higher
-- **RAM**: 2GB minimum, 4GB recommended
-- **Disk**: 500MB for dependencies
-- **Internet**: Required for Gemini API calls
-- **OS**: Windows, macOS, or Linux
+### Recommended Requirements
+- **RAM**: 8 GB or more
+- **Disk Space**: 5 GB free space
+- **Internet**: High-speed broadband
 
----
+## Supported Document Types
 
-## 🤝 Contributing
+- Outpatient consultation notes
+- Hospital discharge summaries
+- Laboratory reports
+- Diagnostic test results
+- Progress notes
+- Treatment plans
 
-This is an enterprise medical AI system. For modifications:
-1. Test thoroughly with sample medical documents
-2. Validate XML output against CCD/CCDA validators
-3. Ensure HIPAA compliance considerations
+## Data Privacy & Security
 
----
+- All processing occurs through secure API connections
+- No data is permanently stored on external servers
+- Local output files are saved only on your machine
+- Review Google's [data privacy policy](https://ai.google.dev/terms) for API usage
 
-## 📄 License
+## Troubleshooting
 
-Enterprise Medical AI System - © 2025
+### Application won't start
+- Ensure Python 3.9+ is installed: `python3 --version`
+- Re-run setup: `./setup.sh`
+- Check `.env` file exists and contains valid API key
 
----
+### Processing fails
+- Verify API key is correct in `.env`
+- Check PDF file is not password-protected
+- Ensure PDF file size is under 200MB
+- Verify internet connection
 
-## 🆘 Support
+### Poor OCR accuracy
+- Ensure PDF has good image quality (300 DPI recommended)
+- Avoid highly compressed or low-resolution scans
+- Check that text is clearly legible
 
-### Documentation
-- See the **"Documentation"** tab in the web UI for detailed info
-- Check `outputs/` directory for processing logs
+## Support
 
-### API Keys
-- Gemini API: https://makersuite.google.com/app/apikey
+For technical assistance:
+1. Check the [SETUP.md](SETUP.md) guide for detailed installation steps
+2. Review the [ARCHITECTURE.md](ARCHITECTURE.md) for system design details
+3. Verify all system requirements are met
 
-### Issues
-- Review error messages in the UI
-- Check terminal logs for detailed stack traces
-- Verify .env configuration
+## License
 
----
+Copyright © 2025. All rights reserved.
 
-## 🎯 Next Steps
-
-1. ✅ Install dependencies
-2. ✅ Configure Gemini API key
-3. ✅ Run `streamlit run app.py`
-4. ✅ Upload a medical PDF
-5. ✅ Download your CCD/CCDA XML!
-
-**Ready to process medical documents with enterprise-grade AI!** 🚀
+Proprietary software. Unauthorized copying, distribution, or modification is prohibited.

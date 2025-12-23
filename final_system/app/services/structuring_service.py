@@ -186,6 +186,17 @@ Extract structured data into JSON format. Remember:
                 safety_settings=safety_settings,
             )
 
+            # Extract actual token usage from API response
+            usage_metadata = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+            if hasattr(response, 'usage_metadata'):
+                usage_metadata["prompt_tokens"] = getattr(response.usage_metadata, 'prompt_token_count', 0)
+                usage_metadata["completion_tokens"] = getattr(response.usage_metadata, 'candidates_token_count', 0)
+                usage_metadata["total_tokens"] = getattr(response.usage_metadata, 'total_token_count', 0)
+
             # Parse JSON response
             response_text = response.text.strip()
 
@@ -230,12 +241,17 @@ Extract structured data into JSON format. Remember:
             # Enterprise Improvement #2: Enrich with source excerpts if missing
             visit_data = self._enrich_source_excerpts(visit_data, chunk['raw_text'])
 
+            # Add token usage metadata
+            visit_data["_usage_metadata"] = usage_metadata
+
             logger.info(
                 "Visit structuring complete",
                 visit_id=chunk["visit_id"],
                 has_medications=len(visit_data.get("medications", [])) > 0,
                 has_problems=len(visit_data.get("problem_list", [])) > 0,
                 has_results=len(visit_data.get("results", [])) > 0,
+                prompt_tokens=usage_metadata["prompt_tokens"],
+                completion_tokens=usage_metadata["completion_tokens"],
             )
 
             return visit_data

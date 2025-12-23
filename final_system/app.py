@@ -69,12 +69,10 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
 
     start_time = time.time()
 
-    # Initialize token tracking
+    # Initialize token tracking (logged only, not shown in UI)
     token_usage = {
         "ocr": {"input": 0, "output": 0, "calls": 0},
         "structuring": {"input": 0, "output": 0, "calls": 0},
-        "xml_llm": {"input": 0, "output": 0, "calls": 0},
-        "pdf_llm": {"input": 0, "output": 0, "calls": 0},
     }
 
     # Save uploaded file
@@ -109,11 +107,12 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
         ocr_service = OCRService()
         ocr_results = ocr_service.process_pages(pdf_data["images"], progress_callback=ocr_progress_callback)
 
-        # Track OCR tokens (estimate based on text length)
+        # Track OCR tokens from actual API response
         for result in ocr_results:
-            text_len = len(result.get("raw_text", ""))
-            token_usage["ocr"]["output"] += text_len // 4  # ~4 chars per token
-            token_usage["ocr"]["calls"] += 1
+            if "usage_metadata" in result:
+                token_usage["ocr"]["input"] += result["usage_metadata"]["prompt_tokens"]
+                token_usage["ocr"]["output"] += result["usage_metadata"]["completion_tokens"]
+                token_usage["ocr"]["calls"] += 1
 
         progress_bar.progress(40)
 
@@ -139,11 +138,14 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
         structuring_service = StructuringService()
         medical_document = structuring_service.structure_document(chunks, ocr_results)
 
-        # Track structuring tokens
-        for chunk in chunks:
-            text_len = len(chunk.get("raw_text", ""))
-            token_usage["structuring"]["input"] += text_len // 4
-            token_usage["structuring"]["calls"] += 1
+        # Track structuring tokens from actual API response
+        for visit in medical_document.visits:
+            if hasattr(visit, '_usage_metadata'):
+                visit_dict = visit.model_dump() if hasattr(visit, 'model_dump') else visit
+                if "_usage_metadata" in visit_dict:
+                    token_usage["structuring"]["input"] += visit_dict["_usage_metadata"]["prompt_tokens"]
+                    token_usage["structuring"]["output"] += visit_dict["_usage_metadata"]["completion_tokens"]
+                    token_usage["structuring"]["calls"] += 1
 
         medical_document.processing_duration_ms = int((time.time() - start_time) * 1000)
 
@@ -178,23 +180,12 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
         with open(xml_file, "w", encoding="utf-8") as f:
             f.write(xml_content)
 
-        # Track XML LLM tokens
-        if medical_document.raw_ocr_text:
-            token_usage["xml_llm"]["input"] += len(medical_document.raw_ocr_text) // 4
-            token_usage["xml_llm"]["output"] += len(xml_content) // 4
-            token_usage["xml_llm"]["calls"] += 1
-
         progress_bar.progress(90)
 
         # PDF (LLM-based)
         pdf_renderer = PDFRenderer()
         pdf_file = output_dir / f"{base_name}_report.pdf"
         pdf_renderer.render(medical_document, str(pdf_file))
-
-        # Track PDF LLM tokens
-        if medical_document.raw_ocr_text:
-            token_usage["pdf_llm"]["input"] += len(medical_document.raw_ocr_text) // 4
-            token_usage["pdf_llm"]["calls"] += 1
 
         # DOCX
         docx_renderer = DOCXRenderer()
@@ -204,12 +195,25 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
         progress_bar.progress(100)
         status_text.text("✅ Processing complete!")
 
-        # Calculate totals
+        # Log token usage for developers (not shown in UI)
         total_tokens = {
             "input": sum(v["input"] for v in token_usage.values()),
             "output": sum(v["output"] for v in token_usage.values()),
             "total": sum(v["input"] + v["output"] for v in token_usage.values()),
         }
+
+        logger.info(
+            "Token usage summary",
+            ocr_input=token_usage["ocr"]["input"],
+            ocr_output=token_usage["ocr"]["output"],
+            ocr_calls=token_usage["ocr"]["calls"],
+            structuring_input=token_usage["structuring"]["input"],
+            structuring_output=token_usage["structuring"]["output"],
+            structuring_calls=token_usage["structuring"]["calls"],
+            total_input=total_tokens["input"],
+            total_output=total_tokens["output"],
+            total=total_tokens["total"],
+        )
 
         return {
             "success": True,
@@ -227,8 +231,6 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
                 "confidence": medical_document.ocr_confidence_avg,
                 "processing_time_ms": medical_document.processing_duration_ms,
             },
-            "token_usage": token_usage,
-            "total_tokens": total_tokens,
         }
 
     finally:
@@ -310,35 +312,6 @@ def main():
                             st.metric("Confidence", f"{result['metadata']['confidence']:.0%}")
                         with col4:
                             st.metric("Time", f"{result['metadata']['processing_time_ms']/1000:.1f}s")
-
-                        # Token usage (debug)
-                        with st.expander("🔍 Token Usage & Cost Estimation"):
-                            st.write("**Token Usage by Model:**")
-
-                            for model, usage in result["token_usage"].items():
-                                if usage["calls"] > 0:
-                                    st.write(f"**{model.upper()}:**")
-                                    st.write(f"  - Calls: {usage['calls']}")
-                                    st.write(f"  - Input tokens: {usage['input']:,}")
-                                    st.write(f"  - Output tokens: {usage['output']:,}")
-                                    st.write(f"  - Total: {usage['input'] + usage['output']:,}")
-                                    st.write("")
-
-                            st.write("**TOTAL TOKENS:**")
-                            st.write(f"  - Input: {result['total_tokens']['input']:,}")
-                            st.write(f"  - Output: {result['total_tokens']['output']:,}")
-                            st.write(f"  - **Total: {result['total_tokens']['total']:,}**")
-
-                            # Cost estimation (Gemini pricing as of Dec 2024)
-                            cost_input = (result['total_tokens']['input'] / 1_000_000) * 0.075
-                            cost_output = (result['total_tokens']['output'] / 1_000_000) * 0.30
-                            total_cost = cost_input + cost_output
-
-                            st.write("")
-                            st.write("**Estimated Cost (Gemini Flash):**")
-                            st.write(f"  - Input: ${cost_input:.4f}")
-                            st.write(f"  - Output: ${cost_output:.4f}")
-                            st.write(f"  - **Total: ${total_cost:.4f}**")
 
                         st.markdown("---")
 
