@@ -277,6 +277,12 @@ class MedicalDocument(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
 
+    # Raw OCR text for LLM-based rendering
+    raw_ocr_text: Optional[str] = Field(
+        None,
+        description="Complete raw OCR text from all pages (for LLM-based rendering)"
+    )
+
     @field_validator('schema_version')
     @classmethod
     def validate_schema_version(cls, v: str) -> str:
