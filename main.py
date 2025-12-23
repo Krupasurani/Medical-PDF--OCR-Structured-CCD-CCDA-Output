@@ -25,9 +25,8 @@ from src.services.ocr_service import OCRService, OCRError
 from src.services.chunking_service import ChunkingService
 from src.services.structuring_service import StructuringService, StructuringError
 from src.services.deduplication_service import DeduplicationService
-from src.renderers.xml_renderer import XMLRenderer
-from src.renderers.pdf_renderer import PDFRenderer
-from src.renderers.docx_renderer import DOCXRenderer
+# Use package-level imports to respect __init__.py configuration
+from src.renderers import XMLRenderer, PDFRenderer, DOCXRenderer
 from src.utils.config import get_config
 from src.utils.logger import get_logger
 
