@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 # Human-Readable Summary Generation Prompt
 CLINICAL_SUMMARY_PROMPT = """# Human-Readable Clinical Summary Generation
 
-You are generating a comprehensive, professional human-readable clinical summary from medical OCR text.
+Generate a comprehensive, professional clinical summary from medical OCR text.
 
 **INPUT**: Raw OCR text from medical documents (handwritten + printed notes across multiple pages)
 
@@ -38,145 +38,326 @@ You are generating a comprehensive, professional human-readable clinical summary
 3. **Preserve clinical uncertainty** - keep "??", "R/O", "Poss.", "[UNCLEAR]" exactly as written
 4. **Use professional medical language** - clear, concise, clinical style
 5. **Group related information** - combine scattered data into coherent sections
-6. **Return ONLY formatted text** - no explanations, no markdown headers (use plain text with bullets)
+6. **Return ONLY formatted text** - no markdown, use plain text with section headers
+
+---
+
+## CRITICAL FORMATTING RULES
+
+1. **Group lab results by category with organized presentation**:
+   - Endocrine Panel, Thyroid Function Tests, etc.
+   - Show test name, value, unit, and status/flag
+   - Add page references for traceability
+
+2. **Write Assessment as clinical paragraphs** with reasoning, not just bullet points
+
+3. **Include Physical Examination section** organized by system (HEENT, Cardiovascular, etc.)
+
+4. **Organize Plan into clear categories**:
+   - Immediate Management
+   - Diagnostic Testing (with checkboxes)
+   - Patient Instructions
+   - Follow-up Schedule
+
+5. **Use visual dividers** between major sections
+
+6. **Add checkboxes** for action items in plan
+
+7. **Show units** for lab values when available (mIU/L, mg/dL, etc.)
 
 ---
 
 ## OUTPUT FORMAT
 
-Generate a professional clinical summary in this EXACT format:
+Generate output in this EXACT structure:
 
-```
-CONTINUITY OF CARE DOCUMENT
-Specialist Consult Summary - [Specialty]
+═══════════════════════════════════════════════════════════════
+         CONTINUITY OF CARE DOCUMENT (CCD)
+           Medical Consultation Summary - [Specialty from OCR]
+═══════════════════════════════════════════════════════════════
 
 PATIENT INFORMATION
-Name: [from OCR or "Not recorded"]
-Date of Birth: [from OCR or "Not recorded"]
-Sex: [from OCR or "Not recorded"]
-Document Date: [from OCR or "Not recorded"]
-Provider: [from OCR or "Not recorded"]
+  Name:                  [from OCR or "Not recorded"]
+  Date of Birth:         [from OCR or "Not recorded"]
+  Sex:                   [from OCR or "Not recorded"]
+  Medical Record #:      [from OCR or "Not recorded"]
+
+DOCUMENT INFORMATION
+  Document Date:         [Extract from OCR or use current date]
+  Consultation Type:     [Endocrinology/Cardiology/etc. from OCR]
+  Provider:              [from OCR or "OCR Processing System"]
+  Organization:          [from OCR or "Medical Records Processing"]
+  Pages Processed:       [count] pages
+
+═══════════════════════════════════════════════════════════════
+
 
 REASON FOR VISIT
-[Extract chief complaint and reason for visit from OCR text. Combine all mentions across pages.]
+────────────────────────────────────────────────────────────────
+
+[Extract chief complaint and reason for visit. Combine all mentions from all pages.
+Write as complete sentences/paragraphs, not bullet points.]
+
 
 HISTORY OF PRESENT ILLNESS
-[Comprehensive HPI combining information from all pages. Include:
+────────────────────────────────────────────────────────────────
+
+[Comprehensive narrative combining information from ALL pages. Include:
 - Onset and duration of symptoms
 - Patient's description of symptoms
 - Relevant timeline
 - Associated symptoms
 - Aggravating/alleviating factors
-Preserve exact wording from OCR where important.]
+Write as flowing paragraphs, preserve exact wording from OCR where clinically important.]
+
 
 PAST MEDICAL HISTORY
-[List all mentioned past medical conditions, surgeries, hospitalizations]
+────────────────────────────────────────────────────────────────
+
 • [Condition 1]
 • [Condition 2]
+• [No history of radiation exposure]
+• [etc.]
+
 
 MEDICATIONS
-[List all medications mentioned across ALL pages with dose/frequency]
-• [Medication 1] - [dose] - [frequency]
-• [Medication 2] - [dose] - [frequency]
+────────────────────────────────────────────────────────────────
+
+[If present:]
+• [Medication name] - [dose] - [frequency] - [route]
+
+[If not documented:]
+Not documented in available records
+
 
 ALLERGIES
-[List all allergies mentioned, or "No known allergies documented" or "Not documented"]
+────────────────────────────────────────────────────────────────
+
+[List allergies or state "No documented drug allergies" or "Not documented"]
+
 
 VITAL SIGNS
-[If present in OCR]
-• Blood Pressure: [value]
-• Heart Rate: [value]
-• Temperature: [value]
-• Respiratory Rate: [value]
-• Oxygen Saturation: [value]
+────────────────────────────────────────────────────────────────
 
-PROBLEM LIST / DIAGNOSES
-[List ALL problems/diagnoses mentioned across ALL pages. Preserve uncertainty markers.]
-• ?? [Problem with uncertainty marker]
-• R/O [Rule-out diagnosis]
-• [Confirmed diagnosis]
+[If present, format as:]
+• Blood Pressure: [value] mmHg
+• Heart Rate: [value] bpm
+• Temperature: [value] °F/°C
+• etc.
 
-LABORATORY RESULTS AND DIAGNOSTIC TESTS
-[Comprehensive list of ALL test results from ALL pages, organized by category]
+[If not present:]
+Not documented in current extraction
 
-Laboratory Tests:
-• [Test name]: [value] [unit] [flag if abnormal] - [Page X]
-• [Test name]: [value] [unit] - [Page Y]
 
-Imaging/Other Studies:
-• [Study name]: [findings] - [Page X]
+ACTIVE PROBLEMS / DIAGNOSES
+────────────────────────────────────────────────────────────────
 
-ASSESSMENT AND IMPRESSION
-[Clinician's assessment combining all impressions from all pages. Group by page/visit if multiple assessments present:]
+[List all problems from ALL pages, numbered. Preserve uncertainty markers:]
+1. ?? [Problem with uncertainty]
+2. R/O [Rule-out diagnosis]
+3. Poss. [Possible diagnosis]
+4. [Confirmed diagnosis]
 
-Page [X] Assessment:
-[Clinical impression from page X]
 
-Page [Y] Assessment:
-[Clinical impression from page Y]
+LABORATORY RESULTS & DIAGNOSTIC TESTS
+────────────────────────────────────────────────────────────────
 
-PLAN OF CARE
-[Comprehensive treatment plan combining ALL plan items from ALL pages. Group logically:]
+[Group by category. Format each category as organized table-like structure:]
 
-Medications/Treatments:
-• [Specific medication changes or treatments]
+Endocrine Panel (Page X):
+  Test Name                          Value        Status
+  ──────────────────────────────────────────────────────
+  [Test 1]                           [val] [unit] [Normal/↑/↓]
+  [Test 2]                           [val] [unit] [Normal/↑/↓]
 
-Diagnostic Studies:
-• [Ordered tests, labs, imaging]
+  [Notes/comments if any]
 
-Follow-up:
-• [Return visit instructions]
-• [Monitoring instructions]
+Thyroid Function Tests (Page Y):
+  Test Name                          Value        Status
+  ──────────────────────────────────────────────────────
+  TSH                                [val] mIU/L  [Normal]
+  Free T3                            [val] pg/mL  [Normal]
+  [etc.]
 
-Patient Education:
-• [Lifestyle modifications]
-• [Patient instructions]
+Additional Laboratory Studies (Page Z):
+  [Similar format for other tests]
 
-```
+Imaging Studies:
+  • [Study name]: [findings] - Page [X]
 
----
+
+PHYSICAL EXAMINATION
+────────────────────────────────────────────────────────────────
+
+[Extract physical exam findings from ALL pages. Organize by system:]
+
+General:
+  [General appearance]
+
+HEENT:
+  [Head, eyes, ears, nose, throat findings]
+
+Thyroid:
+  [Size, consistency, nodules, bruits, etc.]
+
+Cardiovascular:
+  [Heart sounds, murmurs, rhythm]
+
+Respiratory:
+  [Lung sounds, breathing]
+
+Abdominal:
+  [Tenderness, masses, bowel sounds]
+
+Neurological:
+  [Reflexes, strength, tremor, sensation]
+
+Extremities:
+  [Edema, pulses, etc.]
+
+Musculoskeletal:
+  [Range of motion, deformities]
+
+[If no physical exam documented:]
+Physical examination findings not documented in available records
+
+
+CLINICAL ASSESSMENT & IMPRESSION
+────────────────────────────────────────────────────────────────
+
+[Write as clinical paragraphs with reasoning. Group by:]
+
+Primary Diagnostic Considerations:
+
+1. [Primary Diagnosis/Concern]
+   [Clinical reasoning paragraph explaining why this is being considered.
+   Reference specific findings, labs, symptoms. Explain clinical logic.]
+
+2. [Second Primary Concern]
+   [Similar paragraph with clinical reasoning]
+
+Differential Diagnoses Requiring Further Evaluation:
+
+3. Rule Out [Diagnosis]
+   [Paragraph explaining what findings suggest this, what tests are needed,
+   why it's being considered]
+
+4. [Additional differential]
+   [Similar reasoning]
+
+Additional Medical Conditions:
+
+5. [Other relevant diagnoses]
+   [Brief clinical context]
+
+
+TREATMENT PLAN
+────────────────────────────────────────────────────────────────
+
+Immediate Management:
+  ☐ [Action item 1]
+  ☐ [Action item 2]
+  ☐ Patient education provided regarding:
+    - [Topic 1]
+    - [Topic 2]
+
+Diagnostic Testing - Ordered:
+  ☐ [Test 1] ([timing if specified])
+  ☐ 24-hour urine collection for:
+    - [Component 1]
+    - [Component 2]
+  ☐ [Other tests]
+
+Patient Instructions:
+  ☐ [Instruction 1]
+  ☐ [Instruction 2]
+  ☐ Monitor/check for:
+    - [Symptom 1]
+    - [Symptom 2]
+
+Equipment/Monitoring:
+  ☐ [Any equipment to be provided]
+
+Records/Referrals:
+  ☐ [Records to obtain]
+  ☐ [Referrals to make]
+
+Follow-up Schedule:
+  ☐ Return visit in [timeframe] with:
+    - [Required items]
+  ☐ [Additional follow-up instructions]
+  ☐ Urgent follow-up if [conditions]
+
+
+────────────────────────────────────────────────────────────────
+
+DOCUMENT GENERATION INFORMATION
+
+  Processing Date:      [Current date and time]
+  Processing Method:    OCR with AI-assisted clinical structuring
+  OCR Confidence:       [If available from metadata]
+  Source Document:      [page count]-page [handwritten/printed] medical notes
+  Processing Duration:  [If available]
+
+IMPORTANT NOTES:
+
+  • This document was generated from OCR-processed medical records.
+    All critical clinical information should be verified against
+    original source documents.
+
+  • For standards-based electronic health record exchange, refer to
+    the accompanying CCD/CCDA XML document.
+
+  • Clinical uncertainty markers ("??", "R/O", "Possible") have been
+    preserved as documented to maintain diagnostic accuracy.
+
+────────────────────────────────────────────────────────────────
+
 
 ## EXTRACTION RULES
 
-1. **Scan ALL Pages**: Don't stop after page 1 - extract from every page
-2. **Combine Related Data**: If TSH is on page 2 and FT3/FT4 on page 3, list together
-3. **Preserve Source Attribution**: Add "- Page X" for test results to show source
-4. **Handle Duplicates**: If same info appears twice, include once with both page refs
-5. **Chronological Order**: If dates present, order by date (oldest → newest)
-6. **Professional Tone**: Use standard medical documentation language
-7. **Completeness**: Include EVERYTHING - don't summarize away important details
+1. **Scan ALL Pages**: Extract from every single page, not just page 1
+2. **Combine Related Data**: If thyroid tests span pages 2-3, group together
+3. **Preserve Source Attribution**: Add "- Page X" for test results
+4. **Handle Duplicates**: If same info twice, include once with both page refs
+5. **Chronological Order**: Order by date when dates are present
+6. **Professional Tone**: Standard medical documentation language
+7. **Completeness**: Include EVERYTHING - don't summarize away details
+8. **Expand Abbreviations**: Write out "patient" not "pt" in formal sections
+9. **Explain Clinical Reasoning**: In assessment, explain WHY you think each diagnosis
 
----
+## FORMATTING EXAMPLES
 
-## EXAMPLES
+**Lab Results** (table-like format with proper spacing):
+```
+Thyroid Function Tests (Page 2):
+  Test Name                          Value        Status
+  ──────────────────────────────────────────────────────
+  TSH                                1.85 mIU/L   Normal
+  Free T3                            3.3 pg/mL    Normal
+  Free T4                            1.1 ng/dL    Normal
+  TRAb (TSH Receptor Antibodies)     Negative     Normal
+```
 
-**Uncertainty Markers** (preserve these):
-- ?? Psychogenic polydipsia
-- R/O Pheochromocytoma
-- Poss. Reactive Hypoglycemia
+**Assessment** (clinical paragraphs, not bullets):
+```
+1. Possible Psychogenic Polydipsia
+   Patient demonstrates excessive fluid intake with marked polyuria
+   (~8L/24hr urine output). Urine specific gravity low at 1.008,
+   indicating dilute urine. Most endocrine testing unremarkable,
+   suggesting primary polydipsia rather than hormonal cause.
+```
 
-**Lab Results** (include units and page refs):
-- TSH: 1.85 mIU/L - Page 2
-- FT3: 3.3 pg/mL - Page 2
-- Cortisol: 52.9 (ok?) - Page 1
+**Plan** (organized categories with checkboxes):
+```
+Diagnostic Testing - Ordered:
+  ☐ Serial cortisol levels (8 AM and 4 PM)
+  ☐ 24-hour urine collection for:
+    - Creatinine clearance
+    - Free cortisol
+```
 
-**Multiple Assessments** (combine all):
-Page 1 Assessment: ?? Psychogenic polydipsia. Poss. Reactive Hypoglycemia w Anxiety / MNS
-Page 2 Assessment: R/O Pheochromocytoma vs MEA. MNCT / R/O D.I vs. Polydypsia
-Page 5 Assessment: Hx? Hypoglycemia c Anxiety. Hx. GERD. MNG (Hashimoto)
-
----
-
-## OUTPUT INSTRUCTIONS
-
-1. Generate the complete clinical summary following the format above
-2. Use plain text with bullet points (•) for lists
-3. NO markdown syntax (no #, **, `, etc.)
-4. Include ALL information from ALL pages
-5. Be comprehensive but organized
-6. Preserve medical abbreviations and terminology as written in OCR
-
-Generate the clinical summary now.
+Generate the complete clinical summary now following this exact structure.
 """
 
 
