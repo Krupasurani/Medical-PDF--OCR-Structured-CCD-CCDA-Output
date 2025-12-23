@@ -139,13 +139,10 @@ def process_medical_pdf(uploaded_file, output_dir: Path):
         medical_document = structuring_service.structure_document(chunks, ocr_results)
 
         # Track structuring tokens from actual API response
-        for visit in medical_document.visits:
-            if hasattr(visit, '_usage_metadata'):
-                visit_dict = visit.model_dump() if hasattr(visit, 'model_dump') else visit
-                if "_usage_metadata" in visit_dict:
-                    token_usage["structuring"]["input"] += visit_dict["_usage_metadata"]["prompt_tokens"]
-                    token_usage["structuring"]["output"] += visit_dict["_usage_metadata"]["completion_tokens"]
-                    token_usage["structuring"]["calls"] += 1
+        if hasattr(medical_document, '_structuring_token_usage'):
+            token_usage["structuring"]["input"] = medical_document._structuring_token_usage["input"]
+            token_usage["structuring"]["output"] = medical_document._structuring_token_usage["output"]
+            token_usage["structuring"]["calls"] = medical_document._structuring_token_usage["calls"]
 
         medical_document.processing_duration_ms = int((time.time() - start_time) * 1000)
 

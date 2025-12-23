@@ -284,9 +284,20 @@ Extract structured data into JSON format. Remember:
         try:
             # Structure each visit
             visits_data = []
+            total_token_usage = {"input": 0, "output": 0, "calls": 0}
+
             for chunk in chunks:
                 try:
                     visit_data = self.structure_visit(chunk)
+
+                    # Extract token usage before Pydantic validation strips it
+                    if "_usage_metadata" in visit_data:
+                        total_token_usage["input"] += visit_data["_usage_metadata"]["prompt_tokens"]
+                        total_token_usage["output"] += visit_data["_usage_metadata"]["completion_tokens"]
+                        total_token_usage["calls"] += 1
+                        # Remove it so Pydantic doesn't complain
+                        del visit_data["_usage_metadata"]
+
                     visits_data.append(visit_data)
                 except StructuringError as e:
                     logger.warning(
@@ -325,10 +336,16 @@ Extract structured data into JSON format. Remember:
                 raw_ocr_text=raw_ocr_text.strip(),  # Store complete OCR text
             )
 
+            # Attach token usage for developer logging (not part of schema)
+            document._structuring_token_usage = total_token_usage
+
             logger.info(
                 "Document structuring complete",
                 visits=len(visits_data),
                 avg_confidence=round(avg_confidence, 2),
+                structuring_input_tokens=total_token_usage["input"],
+                structuring_output_tokens=total_token_usage["output"],
+                structuring_calls=total_token_usage["calls"],
             )
 
             return document
