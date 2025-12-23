@@ -262,8 +262,6 @@ def main():
         if not config.gemini_api_key:
             st.error("❌ Gemini API key not configured. Add GEMINI_API_KEY to .env file")
             st.stop()
-        else:
-            st.success("✅ System ready")
     except Exception as e:
         st.error(f"❌ Configuration error: {e}")
         st.stop()
@@ -401,16 +399,6 @@ def main():
                 except Exception as e:
                     st.error(f"❌ Processing failed: {str(e)}")
                     st.exception(e)
-
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    **Features:**
-    - ✅ LLM-based CCD/CCDA XML generation
-    - ✅ Professional human-readable reports
-    - ✅ Honest confidence scoring
-    - ✅ Complete token tracking & cost estimation
-    """)
 
 
 if __name__ == "__main__":
