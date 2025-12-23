@@ -39,6 +39,7 @@ You are generating a CCD/CCDA R2.1 compliant XML document from medical data.
 4. **Preserve clinical uncertainty** - keep "??", "?", "R/O", "[UNCLEAR]" notations exactly as written
 5. **Return ONLY valid XML** - no explanations, no markdown, just the XML
 6. **Extract from OCR text**: When given OCR text, identify clinical sections (Reason for Visit, HPI, Problem List, Results, Assessment, Plan) and extract information accordingly
+7. **ESCAPE XML SPECIAL CHARACTERS**: Replace & with &amp;, < with &lt;, > with &gt;, " with &quot; in attribute values and text content
 
 ---
 
@@ -370,6 +371,18 @@ Generate the complete CCD/CCDA XML document now. Output ONLY the XML, no explana
                 xml_content = xml_content[:-3]
 
             xml_content = xml_content.strip()
+
+            # Fix common XML escaping issues from LLM
+            import re
+            # Fix attribute values with unescaped quotes
+            def fix_attr_quotes(match):
+                attr_val = match.group(1)
+                # Escape any quotes inside the attribute value
+                attr_val = attr_val.replace('"', '&quot;')
+                return f'="{attr_val}"'
+
+            # This regex finds attribute="value" patterns and fixes quotes inside
+            # But we need to be careful not to break already-escaped content
 
             # Ensure it starts with <?xml
             if not xml_content.startswith("<?xml"):
